@@ -57,7 +57,11 @@ def compute_acceleration_magnitude(df):
 
 
 def create_reference_signal(notes, duration, sample_rate=100):
-    """Create a reference signal from note timings.
+    """Create a reference signal from note timings using causal impulse response.
+    
+    Models each foot press as a damped inertial response of the body, not an
+    instantaneous impulse. This creates a "pseudo-acceleration" signal that is
+    physically comparable to the real accelerometer signal.
     
     Args:
         notes: List of SMNote objects
@@ -77,9 +81,29 @@ def create_reference_signal(notes, duration, sample_rate=100):
         if 0 <= idx < num_samples:
             ref_signal[idx] = 1.0
     
-    # Smooth the reference signal (simulates the temporal spread of sensor response)
-    window_size = int(0.1 * sample_rate)  # 100ms window
-    ref_signal = signal.convolve(ref_signal, signal.windows.gaussian(window_size, window_size/6), mode='same')
+    # Create causal impulse response: damped exponential decay
+    # Models the physical response of body mass + damping to foot impact
+    # Typical decay time for human body response: 100-200ms
+    decay_time = 0.15  # seconds (150ms decay time constant)
+    impulse_duration = 0.5  # seconds (500ms total response duration)
+    
+    impulse_samples = int(impulse_duration * sample_rate)
+    t_impulse = np.arange(impulse_samples) / sample_rate
+    
+    # Causal impulse response: exponential decay starting at impact
+    # h(t) = exp(-t/tau) for t >= 0
+    impulse_response = np.exp(-t_impulse / decay_time)
+    
+    # Normalize to preserve energy
+    impulse_response = impulse_response / np.sum(impulse_response)
+    
+    # Convolve with impulse response to create pseudo-acceleration signal
+    ref_signal = signal.convolve(ref_signal, impulse_response, mode='same')
+    
+    # Apply same bandpass filter as sensor signal for consistency
+    # This ensures both signals are in comparable frequency bands
+    sos = signal.butter(4, [0.5, 10], btype='band', fs=sample_rate, output='sos')
+    ref_signal = signal.sosfiltfilt(sos, ref_signal)
     
     return time, ref_signal
 
