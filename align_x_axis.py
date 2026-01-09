@@ -244,7 +244,6 @@ def plot_expected_signal(time_sec, expected, note_times, title, kernel_type='bip
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Expected signal (a.u.)')
     ax.set_title(f'Expected Signal from .sm (kernel: {kernel_type}): {title}')
-    ax.set_title(f'Expected Signal from .sm: {title}')
     ax.legend()
     ax.grid(True, alpha=0.3)
     return fig
