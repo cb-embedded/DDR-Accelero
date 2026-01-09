@@ -43,11 +43,12 @@ def load_sensor_data(zip_path):
 
 def compute_acceleration_magnitude(df):
     """Compute the magnitude of 3D acceleration vector."""
-    # Assume columns are: Time, X, Y, Z (or similar)
-    time = df.iloc[:, 0].values
-    x = df.iloc[:, 1].values
-    y = df.iloc[:, 2].values
-    z = df.iloc[:, 3].values
+    # CSV format: time, seconds_elapsed, z, y, x
+    # Use seconds_elapsed column (index 1) as it's already in seconds
+    time = df.iloc[:, 1].values * 1000.0  # Convert to milliseconds
+    x = df.iloc[:, 4].values  # x is at index 4
+    y = df.iloc[:, 3].values  # y is at index 3
+    z = df.iloc[:, 2].values  # z is at index 2
     
     # Compute magnitude
     magnitude = np.sqrt(x**2 + y**2 + z**2)
