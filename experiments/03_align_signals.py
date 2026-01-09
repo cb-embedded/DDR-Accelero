@@ -21,12 +21,12 @@ import importlib.util
 
 # Signal processing constants
 BANDPASS_LOW_HZ = 0.5  # Low cutoff for bandpass filter (Hz)
-BANDPASS_HIGH_HZ = 10.0  # High cutoff for bandpass filter (Hz)
+BANDPASS_HIGH_HZ = 8.0  # High cutoff for bandpass filter (Hz) - matched to typical body motion
 BANDPASS_ORDER = 4  # Butterworth filter order
 
-# Biomechanical model constants for impulse response
-BODY_DECAY_TIME_SEC = 0.30  # Decay time constant for damped body response (300ms - longer for better SNR)
-IMPULSE_DURATION_SEC = 1.0  # Total duration of impulse response (1000ms - capture full response)
+# Biomechanical model constants for impulse response (from research on human biomechanics)
+BODY_DECAY_TIME_SEC = 0.10  # Decay time constant τ for damped body response (80-150ms typical)
+IMPULSE_DURATION_SEC = 0.8  # Total duration of impulse response (capture full decay)
 
 # Load the parse_stepmania module dynamically
 spec = importlib.util.spec_from_file_location("parse_sm", Path(__file__).parent / "02_parse_stepmania.py")
@@ -66,62 +66,76 @@ def compute_acceleration_magnitude(df):
 
 
 def create_reference_signal(notes, duration, sample_rate=100):
-    """Create a reference signal from note timings using causal impulse response.
+    """Create reference signal using proper biomechanical model per explicit formula.
     
-    Models each foot press as a damped inertial response of the body, not an
-    instantaneous impulse. This creates a "pseudo-acceleration" signal that is
-    physically comparable to the real accelerometer signal.
+    Implements the mathematically correct transformation:
+    1. Step onsets are the discrete note events e_i at times t_i
+    2. Apply causal impulse response: h(t) = exp(-t/τ) · 1_{t≥0} with τ ≈ 80-150ms
+    3. Generate pseudo-acceleration: p(t) = Σ_i h(t - t_i)
+    4. Apply bandpass filter matching accelerometer: BandPass_{[0.5,8]}(p(t))
+    5. Normalize: (p(t) - μ) / σ
     
-    The reference signal is kept as positive-only (envelope) to match the sensor
-    envelope representation, avoiding the sign mismatch that would occur with
-    oscillating filtered signals.
+    This respects causality, damping, and human biomechanics for sharp correlation peaks.
     
     Args:
-        notes: List of SMNote objects
+        notes: List of SMNote objects (discrete step onset events)
         duration: Duration of signal in seconds
         sample_rate: Samples per second
     
     Returns:
-        time array and signal array
+        time array and normalized pseudo-acceleration signal
     """
     num_samples = int(duration * sample_rate)
     time = np.linspace(0, duration, num_samples)
-    ref_signal = np.zeros(num_samples)
     
-    # Place a spike at each note
+    # Step 1: Notes ARE the step onsets (discrete events e_i at times t_i)
+    # Create impulse train at note times
+    step_onsets = np.zeros(num_samples)
     for note in notes:
         idx = int(note.time * sample_rate)
         if 0 <= idx < num_samples:
-            ref_signal[idx] = 1.0
+            step_onsets[idx] = 1.0
     
-    # Create causal impulse response: damped exponential decay
-    # Models the physical response of body mass + damping to foot impact
-    # Using longer decay to match the averaged nature of sensor envelope
+    # Step 2: Create causal impulse response h(t) = exp(-t/τ) for t ≥ 0
     impulse_samples = int(IMPULSE_DURATION_SEC * sample_rate)
     t_impulse = np.arange(impulse_samples) / sample_rate
-    
-    # Causal impulse response: exponential decay starting at impact
-    # h(t) = exp(-t/tau) for t >= 0
     impulse_response = np.exp(-t_impulse / BODY_DECAY_TIME_SEC)
     
-    # Normalize to preserve energy
+    # Normalize impulse response to unit energy
     impulse_response = impulse_response / np.sum(impulse_response)
     
-    # Convolve with impulse response to create pseudo-acceleration signal
-    ref_signal = signal.convolve(ref_signal, impulse_response, mode='same')
+    # Step 3: Generate pseudo-acceleration by convolution p(t) = Σ_i h(t - t_i)
+    pseudo_accel = signal.convolve(step_onsets, impulse_response, mode='same')
     
-    # Smooth to match sensor envelope smoothing (200ms window in sensor processing)
-    # This reduces high-frequency noise and improves SNR
-    window_size = int(0.2 * sample_rate)  # 200ms - match sensor envelope smoothing
-    if window_size > 1:
-        smooth_window = signal.windows.hann(window_size) / sum(signal.windows.hann(window_size))
-        ref_signal = signal.convolve(ref_signal, smooth_window, mode='same')
+    # Step 4: Apply bandpass filter matching accelerometer bandwidth [0.5, 8] Hz
+    # This removes DC drift and very high frequency noise
+    sos = signal.butter(BANDPASS_ORDER, [BANDPASS_LOW_HZ, BANDPASS_HIGH_HZ], 
+                        btype='band', fs=sample_rate, output='sos')
+    pseudo_accel_filtered = signal.sosfiltfilt(sos, pseudo_accel)
+    
+    # Step 5: Local normalization (z-score): (p(t) - μ) / σ
+    # This ensures the reference signal has zero mean and unit variance
+    mean_val = np.mean(pseudo_accel_filtered)
+    std_val = np.std(pseudo_accel_filtered)
+    if std_val > 1e-10:
+        ref_signal = (pseudo_accel_filtered - mean_val) / std_val
+    else:
+        ref_signal = pseudo_accel_filtered - mean_val
     
     return time, ref_signal
 
 
 def preprocess_sensor_signal(time_ms, magnitude, target_sample_rate=100):
-    """Preprocess sensor signal: resample and filter."""
+    """Preprocess sensor signal to match reference signal processing.
+    
+    Applies the same processing as the reference signal:
+    1. Resample to target rate
+    2. Remove DC component  
+    3. Apply bandpass filter [0.5, 8] Hz
+    4. Normalize (z-score)
+    
+    Returns filtered and normalized acceleration signal, not envelope.
+    """
     # Convert time to seconds
     time_sec = time_ms / 1000.0
     
@@ -131,31 +145,33 @@ def preprocess_sensor_signal(time_ms, magnitude, target_sample_rate=100):
     new_time = np.linspace(0, duration, num_samples)
     resampled = np.interp(new_time, time_sec - time_sec[0], magnitude)
     
-    # Remove DC component and apply bandpass filter
+    # Remove DC component
     resampled = resampled - np.mean(resampled)
     
-    # Bandpass filter to focus on human movement frequencies
-    sos = signal.butter(BANDPASS_ORDER, [BANDPASS_LOW_HZ, BANDPASS_HIGH_HZ], 
+    # Apply bandpass filter matching reference signal [0.5, 8] Hz
+    sos = signal.butter(BANDPASS_ORDER, [BANDPASS_LOW_HZ, BANDPASS_HIGH_HZ],
                         btype='band', fs=target_sample_rate, output='sos')
     filtered = signal.sosfiltfilt(sos, resampled)
     
-    # Compute envelope (absolute value + smoothing)
-    envelope = np.abs(filtered)
-    window_size = int(0.2 * target_sample_rate)  # 200ms window
-    envelope = signal.convolve(envelope, signal.windows.hann(window_size)/sum(signal.windows.hann(window_size)), mode='same')
+    # Normalize (z-score) to match reference signal normalization
+    mean_val = np.mean(filtered)
+    std_val = np.std(filtered)
+    if std_val > 1e-10:
+        normalized = (filtered - mean_val) / std_val
+    else:
+        normalized = filtered - mean_val
     
-    return new_time, envelope
+    return new_time, normalized
 
 
 def find_alignment(sensor_signal, ref_signal, sample_rate=100):
-    """Find the best time offset using cross-correlation."""
-    # Normalize signals
-    sensor_norm = (sensor_signal - np.mean(sensor_signal)) / (np.std(sensor_signal) + 1e-8)
-    ref_norm = (ref_signal - np.mean(ref_signal)) / (np.std(ref_signal) + 1e-8)
+    """Find the best time offset using cross-correlation.
     
-    # Compute cross-correlation
-    corr = correlate(sensor_norm, ref_norm, mode='full')
-    lags = np.arange(-len(ref_norm) + 1, len(sensor_norm))
+    Both signals are already normalized (z-score), so we can correlate directly.
+    """
+    # Signals are already normalized, compute cross-correlation directly
+    corr = correlate(sensor_signal, ref_signal, mode='full')
+    lags = np.arange(-len(ref_signal) + 1, len(sensor_signal))
     
     # Convert lags to time
     time_lags = lags / sample_rate
