@@ -200,6 +200,13 @@ Each experiment saves outputs to the `experiments/output/` directory:
 - **Data quality:** Clean, consistent data collection is essential
 - **Phone placement:** Sensor readings depend on where/how the phone is held or mounted
 
+## Known Limitations
+
+- Experiments assume sensor data contains at least accelerometer/gyroscope data
+- Feature extraction requires sufficient data points in each window (>5 samples)
+- Assumes sensor data format: Time, X, Y, Z columns
+- Cross-correlation alignment may need adjustment for very short or noisy recordings
+
 ## References
 
 - StepMania file format: https://github.com/stepmania/stepmania/wiki/sm
