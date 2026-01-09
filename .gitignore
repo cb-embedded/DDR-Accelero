@@ -32,11 +32,12 @@ data/labels/*.csv
 data/splits/*.npz
 data/splits/*.json
 
-# Keep directory structure
+# Keep directory structure and example files
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/features/.gitkeep
 !data/labels/.gitkeep
+!data/labels/example_labels.csv
 !data/splits/.gitkeep
 
 # Jupyter Notebook
