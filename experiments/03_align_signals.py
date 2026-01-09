@@ -25,8 +25,8 @@ BANDPASS_HIGH_HZ = 10.0  # High cutoff for bandpass filter (Hz)
 BANDPASS_ORDER = 4  # Butterworth filter order
 
 # Biomechanical model constants for impulse response
-BODY_DECAY_TIME_SEC = 0.15  # Decay time constant for damped body response (150ms)
-IMPULSE_DURATION_SEC = 0.5  # Total duration of impulse response (500ms)
+BODY_DECAY_TIME_SEC = 0.30  # Decay time constant for damped body response (300ms - longer for better SNR)
+IMPULSE_DURATION_SEC = 1.0  # Total duration of impulse response (1000ms - capture full response)
 
 # Load the parse_stepmania module dynamically
 spec = importlib.util.spec_from_file_location("parse_sm", Path(__file__).parent / "02_parse_stepmania.py")
@@ -72,6 +72,10 @@ def create_reference_signal(notes, duration, sample_rate=100):
     instantaneous impulse. This creates a "pseudo-acceleration" signal that is
     physically comparable to the real accelerometer signal.
     
+    The reference signal is kept as positive-only (envelope) to match the sensor
+    envelope representation, avoiding the sign mismatch that would occur with
+    oscillating filtered signals.
+    
     Args:
         notes: List of SMNote objects
         duration: Duration of signal in seconds
@@ -92,6 +96,7 @@ def create_reference_signal(notes, duration, sample_rate=100):
     
     # Create causal impulse response: damped exponential decay
     # Models the physical response of body mass + damping to foot impact
+    # Using longer decay to match the averaged nature of sensor envelope
     impulse_samples = int(IMPULSE_DURATION_SEC * sample_rate)
     t_impulse = np.arange(impulse_samples) / sample_rate
     
@@ -103,15 +108,14 @@ def create_reference_signal(notes, duration, sample_rate=100):
     impulse_response = impulse_response / np.sum(impulse_response)
     
     # Convolve with impulse response to create pseudo-acceleration signal
-    # Using 'same' mode keeps signal length constant
-    # Note: May introduce edge effects for signals shorter than ~1 second
     ref_signal = signal.convolve(ref_signal, impulse_response, mode='same')
     
-    # Apply same bandpass filter as sensor signal for consistency
-    # This ensures both signals are in comparable frequency bands
-    sos = signal.butter(BANDPASS_ORDER, [BANDPASS_LOW_HZ, BANDPASS_HIGH_HZ], 
-                        btype='band', fs=sample_rate, output='sos')
-    ref_signal = signal.sosfiltfilt(sos, ref_signal)
+    # Smooth to match sensor envelope smoothing (200ms window in sensor processing)
+    # This reduces high-frequency noise and improves SNR
+    window_size = int(0.2 * sample_rate)  # 200ms - match sensor envelope smoothing
+    if window_size > 1:
+        smooth_window = signal.windows.hann(window_size) / sum(signal.windows.hann(window_size))
+        ref_signal = signal.convolve(ref_signal, smooth_window, mode='same')
     
     return time, ref_signal
 

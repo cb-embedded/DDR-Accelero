@@ -126,18 +126,49 @@ The causal impulse response approach (exponential decay modeling damped body res
 By modeling each foot press as a **causal damped inertial response** (mass + damping system) rather than a symmetric Gaussian, the reference signal now correctly represents the biomechanical reality: a foot impact produces an exponentially decaying acceleration response, not an instantaneous impulse. This fundamental improvement makes the correlation significantly more robust and discriminating.
 
 ### Recommendations
-1. ✅ The script is ready to use for aligning sensor data with charts
+1. ✅ The script is ready to use for finding approximate alignment offsets
 2. The verification script can be used to validate new captures
-3. Consider adding validation checks for:
-   - Minimum correlation threshold (e.g., > 400)
+3. **Known limitation:** SNR ~4-5 is marginal. For production robustness (SNR > 10), consider:
+   - Peak-based feature extraction instead of continuous envelope
+   - Motion segmentation to isolate step events from background sway  
+   - Multi-sensor fusion (gyroscope + accelerometer) for better step isolation
+4. Consider adding validation checks for:
+   - Minimum SNR threshold (e.g., > 3 for warning, > 5 for good)
    - Maximum reasonable offset (e.g., ±60 seconds)
-   - Warning if correlation peak is not significantly higher than background
+   - Warning if correlation peak is not significantly higher than secondary peaks
 
 ## Files Modified
-- `experiments/03_align_signals.py` - Fixed timestamp parsing
-- `experiments/verify_alignment.py` - New verification script
+- `experiments/03_align_signals.py` - Fixed timestamp parsing and improved impulse response
+- `experiments/verify_alignment.py` - New verification script  
 - `.gitignore` - Added to exclude Python cache files
 
 ## Files Added (Proof)
 - 5 correlation plots in `experiments/` directory
 - 1 alignment plot in `experiments/output/` directory
+- `test_lucky_orb_correlation.py` - SNR analysis script
+- `CORRELATION_IMPROVEMENT_ANALYSIS.md` - Detailed analysis
+
+## Known Limitations
+
+### Signal-to-Noise Ratio (Identified from Extended Testing)
+Testing with ±40 second correlation windows reveals SNR ~4-5, which is **marginal** but functional:
+
+**Root Cause:**
+- Sensor envelope has continuous background activity from natural body sway/movement
+- Coefficient of variation only ~0.47 (signal varies 47% around mean)
+- Max/median ratio only ~3.6x (limited dynamic range)
+- This creates correlation noise at all time offsets, limiting SNR
+
+**Impact:**
+- Alignment works for finding correct offset ✓
+- Peak is visible and identifiable ✓  
+- But SNR 4-5 is not as robust as ideal (target: SNR > 10)
+
+**Status:** Acceptable for experimental/development use, production would benefit from improvements
+
+### Potential Improvements for Higher SNR
+To achieve SNR > 10 for production robustness:
+1. **Peak-based detection:** Extract only strong acceleration peaks rather than continuous envelope
+2. **Motion segmentation:** Isolate step events from background sway using thresholding
+3. **Multi-sensor fusion:** Combine gyroscope + accelerometer for better step isolation
+4. **Adaptive baseline:** Dynamically suppress periods of low activity
