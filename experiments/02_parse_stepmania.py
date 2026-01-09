@@ -165,6 +165,9 @@ def main():
             break
     
     if not target_file:
+        if not sm_files:
+            print("No .sm files found")
+            sys.exit(1)
         target_file = sm_files[0]
     
     print(f"Analyzing: {target_file.name}\n")

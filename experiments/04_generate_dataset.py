@@ -219,8 +219,15 @@ def main():
     
     if not sensor_file or not sm_file:
         print("Using any available files...")
-        sensor_file = list(raw_data_dir.glob('*.zip'))[0]
-        sm_file = list(sm_dir.glob('*.sm'))[0]
+        zip_files = list(raw_data_dir.glob('*.zip'))
+        sm_files_list = list(sm_dir.glob('*.sm'))
+        
+        if not zip_files or not sm_files_list:
+            print("Error: No sensor or StepMania files found")
+            sys.exit(1)
+        
+        sensor_file = zip_files[0]
+        sm_file = sm_files_list[0]
     
     print(f"Processing:")
     print(f"  Sensor: {sensor_file.name}")

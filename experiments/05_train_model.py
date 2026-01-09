@@ -161,10 +161,10 @@ def main():
         count = y[:, i].sum()
         print(f"  {label}: {count} ({count/len(y)*100:.1f}%)")
     
-    # Split data
+    # Split data (stratification on multi-label is complex, so we don't stratify)
     print(f"\nSplitting data (80% train, 20% test)...")
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y[:, 0]  # Stratify on first arrow
+        X, y, test_size=0.2, random_state=42
     )
     
     print(f"  Train samples: {len(X_train)}")
