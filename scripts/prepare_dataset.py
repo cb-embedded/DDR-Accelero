@@ -153,7 +153,7 @@ def extract_features_from_window(window: pd.DataFrame, config: Dict,
     
     # Frequency-domain features
     if config['features']['frequency_domain']:
-        n_coeffs = config['features']['frequency_domain'][0]['fft_coefficients']
+        n_coeffs = config['features']['frequency_domain']['fft_coefficients']
         for prefix in ['acc', 'gyro', 'mag']:
             if any(col.startswith(prefix) for col in window.columns):
                 freq_features = extract_frequency_features(

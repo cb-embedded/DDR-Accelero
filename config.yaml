@@ -30,7 +30,7 @@ features:
     - max
     - magnitude
   frequency_domain:
-    - fft_coefficients: 10  # Number of FFT coefficients to extract
+    fft_coefficients: 10  # Number of FFT coefficients to extract
   
   # Additional features
   compute_jerk: true
