@@ -4,7 +4,7 @@ Experiment 3: Align sensor data with StepMania charts using correlation.
 
 This script attempts to find the time offset between sensor data capture and the
 StepMania chart by:
-1. Creating a reference signal from the chart (spike at each note)
+1. Creating a reference signal from the chart using causal impulse response
 2. Computing signal features from sensor data (acceleration magnitude)
 3. Using cross-correlation to find the best alignment
 """
@@ -18,6 +18,15 @@ from scipy.signal import correlate
 import sys
 import os
 import importlib.util
+
+# Signal processing constants
+BANDPASS_LOW_HZ = 0.5  # Low cutoff for bandpass filter (Hz)
+BANDPASS_HIGH_HZ = 10.0  # High cutoff for bandpass filter (Hz)
+BANDPASS_ORDER = 4  # Butterworth filter order
+
+# Biomechanical model constants for impulse response
+BODY_DECAY_TIME_SEC = 0.15  # Decay time constant for damped body response (150ms)
+IMPULSE_DURATION_SEC = 0.5  # Total duration of impulse response (500ms)
 
 # Load the parse_stepmania module dynamically
 spec = importlib.util.spec_from_file_location("parse_sm", Path(__file__).parent / "02_parse_stepmania.py")
@@ -83,26 +92,25 @@ def create_reference_signal(notes, duration, sample_rate=100):
     
     # Create causal impulse response: damped exponential decay
     # Models the physical response of body mass + damping to foot impact
-    # Typical decay time for human body response: 100-200ms
-    decay_time = 0.15  # seconds (150ms decay time constant)
-    impulse_duration = 0.5  # seconds (500ms total response duration)
-    
-    impulse_samples = int(impulse_duration * sample_rate)
+    impulse_samples = int(IMPULSE_DURATION_SEC * sample_rate)
     t_impulse = np.arange(impulse_samples) / sample_rate
     
     # Causal impulse response: exponential decay starting at impact
     # h(t) = exp(-t/tau) for t >= 0
-    impulse_response = np.exp(-t_impulse / decay_time)
+    impulse_response = np.exp(-t_impulse / BODY_DECAY_TIME_SEC)
     
     # Normalize to preserve energy
     impulse_response = impulse_response / np.sum(impulse_response)
     
     # Convolve with impulse response to create pseudo-acceleration signal
+    # Using 'same' mode keeps signal length constant
+    # Note: May introduce edge effects for signals shorter than ~1 second
     ref_signal = signal.convolve(ref_signal, impulse_response, mode='same')
     
     # Apply same bandpass filter as sensor signal for consistency
     # This ensures both signals are in comparable frequency bands
-    sos = signal.butter(4, [0.5, 10], btype='band', fs=sample_rate, output='sos')
+    sos = signal.butter(BANDPASS_ORDER, [BANDPASS_LOW_HZ, BANDPASS_HIGH_HZ], 
+                        btype='band', fs=sample_rate, output='sos')
     ref_signal = signal.sosfiltfilt(sos, ref_signal)
     
     return time, ref_signal
@@ -122,8 +130,9 @@ def preprocess_sensor_signal(time_ms, magnitude, target_sample_rate=100):
     # Remove DC component and apply bandpass filter
     resampled = resampled - np.mean(resampled)
     
-    # Bandpass filter (0.5 Hz to 10 Hz) to focus on human movement frequencies
-    sos = signal.butter(4, [0.5, 10], btype='band', fs=target_sample_rate, output='sos')
+    # Bandpass filter to focus on human movement frequencies
+    sos = signal.butter(BANDPASS_ORDER, [BANDPASS_LOW_HZ, BANDPASS_HIGH_HZ], 
+                        btype='band', fs=target_sample_rate, output='sos')
     filtered = signal.sosfiltfilt(sos, resampled)
     
     # Compute envelope (absolute value + smoothing)
