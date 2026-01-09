@@ -6,10 +6,16 @@ Phase 1: Evidence-driven, step-by-step approach.
 Goal: Achieve unambiguous alignment with a dominant correlation peak.
 
 Usage:
-    python align_x_axis.py <capture_zip> <sm_file> <difficulty>
+    python align_x_axis.py <capture_zip> <sm_file> <difficulty> [kernel_type]
+
+Arguments:
+    capture_zip: Path to sensor data zip file
+    sm_file: Path to StepMania .sm file
+    difficulty: Chart difficulty (e.g., Easy, Medium, Hard)
+    kernel_type: (optional) 'impulse', 'bipolar', or 'gaussian' (default: bipolar)
 
 Example:
-    python align_x_axis.py raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip "sm_files/Lucky Orb.sm" Medium
+    python align_x_axis.py raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip "sm_files/Lucky Orb.sm" Medium bipolar
 """
 
 import sys
@@ -106,15 +112,58 @@ def parse_note_times(notes_data, bpm, offset):
     return np.array(note_times)
 
 
-def create_expected_signal(note_times, duration, sample_rate):
-    """Create expected signal from note times as impulse train."""
+def create_expected_signal(note_times, duration, sample_rate, kernel_type='bipolar'):
+    """Create expected signal from note times with physical kernel.
+    
+    Args:
+        note_times: Array of note timestamps
+        duration: Signal duration in seconds
+        sample_rate: Samples per second
+        kernel_type: 'impulse' (delta), 'bipolar' (accel+decel), or 'gaussian'
+    
+    Returns:
+        Expected signal array
+    """
     num_samples = int(duration * sample_rate)
     expected = np.zeros(num_samples)
     
+    # Create kernel to apply at each note
+    if kernel_type == 'impulse':
+        # Simple delta function (original approach)
+        kernel = np.array([1.0])
+    elif kernel_type == 'bipolar':
+        # Bipolar pulse: acceleration followed by deceleration
+        # Mimics foot impact (accelerate down, decelerate on landing)
+        pulse_width = int(0.05 * sample_rate)  # 50ms per phase
+        kernel = np.concatenate([
+            np.ones(pulse_width),      # Acceleration
+            -np.ones(pulse_width)      # Deceleration
+        ])
+        kernel = kernel / np.max(np.abs(kernel))  # Normalize
+    elif kernel_type == 'gaussian':
+        # Smooth Gaussian pulse
+        width = int(0.1 * sample_rate)  # 100ms width
+        x = np.arange(-width, width)
+        kernel = np.exp(-(x**2) / (2 * (width/3)**2))
+        kernel = kernel / np.max(kernel)
+    else:
+        raise ValueError(f"Unknown kernel type: {kernel_type}")
+    
+    # Apply kernel at each note time
+    kernel_half = len(kernel) // 2
     for t in note_times:
         idx = int(t * sample_rate)
-        if 0 <= idx < num_samples:
-            expected[idx] = 1.0
+        start_idx = idx - kernel_half
+        end_idx = start_idx + len(kernel)
+        
+        # Handle boundary conditions
+        k_start = max(0, -start_idx)
+        k_end = len(kernel) - max(0, end_idx - num_samples)
+        s_start = max(0, start_idx)
+        s_end = min(num_samples, end_idx)
+        
+        if s_start < s_end and k_start < k_end:
+            expected[s_start:s_end] += kernel[k_start:k_end]
     
     return expected
 
@@ -186,7 +235,7 @@ def plot_raw_x(time_sec, x_raw, title):
     return fig
 
 
-def plot_expected_signal(time_sec, expected, note_times, title):
+def plot_expected_signal(time_sec, expected, note_times, title, kernel_type='bipolar'):
     """Plot expected signal from .sm notes."""
     fig, ax = plt.subplots(figsize=(15, 4))
     ax.plot(time_sec, expected, linewidth=1)
@@ -194,6 +243,7 @@ def plot_expected_signal(time_sec, expected, note_times, title):
                c='red', s=10, alpha=0.5, label='Note times')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Expected signal (a.u.)')
+    ax.set_title(f'Expected Signal from .sm (kernel: {kernel_type}): {title}')
     ax.set_title(f'Expected Signal from .sm: {title}')
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -240,20 +290,22 @@ def plot_alignment_overlay(x_time, x_signal, exp_time, exp_signal, offset, title
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) < 4 or len(sys.argv) > 5:
         print(__doc__)
         sys.exit(1)
     
     capture_path = Path(sys.argv[1])
     sm_path = Path(sys.argv[2])
     difficulty = sys.argv[3]
+    kernel_type = sys.argv[4] if len(sys.argv) == 5 else 'bipolar'
     
     print("="*70)
     print("DDR-Accelero: Minimal X-axis Alignment (Phase 1)")
     print("="*70)
     print(f"\nCapture: {capture_path.name}")
     print(f"Song: {sm_path.name}")
-    print(f"Difficulty: {difficulty}\n")
+    print(f"Difficulty: {difficulty}")
+    print(f"Kernel type: {kernel_type}\n")
     
     # Step 1: Load raw x-axis
     print("[1/6] Loading raw x-axis data...")
@@ -280,9 +332,9 @@ def main():
     x_time, x_resampled = resample_signal(time_sec, x_raw, target_rate)
     
     # Step 4: Create expected signal
-    print("\n[4/6] Creating expected signal...")
+    print(f"\n[4/6] Creating expected signal (kernel: {kernel_type})...")
     max_duration = max(x_time[-1], note_times[-1] if len(note_times) > 0 else 0)
-    expected = create_expected_signal(note_times, max_duration, target_rate)
+    expected = create_expected_signal(note_times, max_duration, target_rate, kernel_type)
     exp_time = np.linspace(0, max_duration, len(expected))
     
     # Step 5: Cross-correlation
@@ -307,15 +359,15 @@ def main():
     fig1 = plot_raw_x(time_sec, x_raw, base_name)
     save_plot(fig1, f'{base_name}_raw_x.png')
     
-    fig2 = plot_expected_signal(exp_time, expected, note_times, base_name)
-    save_plot(fig2, f'{base_name}_expected.png')
+    fig2 = plot_expected_signal(exp_time, expected, note_times, base_name, kernel_type)
+    save_plot(fig2, f'{base_name}_expected_{kernel_type}.png')
     
     fig3 = plot_correlation(time_lags, corr, peak_lag, peak_ratio, z_score, base_name)
-    save_plot(fig3, f'{base_name}_correlation.png')
+    save_plot(fig3, f'{base_name}_correlation_{kernel_type}.png')
     
     fig4 = plot_alignment_overlay(x_time, x_resampled, exp_time, expected, 
                                    peak_lag, base_name)
-    save_plot(fig4, f'{base_name}_alignment.png')
+    save_plot(fig4, f'{base_name}_alignment_{kernel_type}.png')
     
     print("\n" + "="*70)
     print("SUMMARY")

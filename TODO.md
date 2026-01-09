@@ -4,102 +4,136 @@
 ✓ Step 0: Input discovery completed (see INPUT_DISCOVERY.md)
 ✓ Implemented minimal alignment script: `align_x_axis.py`
 ✓ Generated PNG artifacts in `artifacts/` directory
-⚠️ **PROBLEM**: Weak correlation peak detected
+✓ Tested kernel shapes (impulse, bipolar, gaussian) - no improvement
+✓ Tested all axes (x, y, z, magnitude) - all weak
+⚠️ **PROBLEM**: Weak correlation peak across ALL axes and kernel types
 
 ## Results from Lucky Orb Medium Test
-- **Peak ratio**: 1.15 (target: > 2.0 for dominance)
-- **Z-score**: 3.63 (target: > 5.0)
-- **Assessment**: Alignment is ambiguous - multiple peaks of similar magnitude
 
-## Diagnosis: Why is the peak weak?
+### All Axes Tested (bipolar kernel):
+| Axis | Peak Ratio | Z-score | Offset | Status |
+|------|------------|---------|--------|--------|
+| x | 1.16 | 4.33 | 30.420s | ⚠ WEAK |
+| y | 1.26 | 4.87 | 30.410s | ⚠ WEAK |
+| z | 1.15 | 5.36 | 30.550s | ⚠ WEAK |
+| magnitude | 1.00 | 4.48 | 44.680s | ⚠ WEAK |
 
-The cross-correlation between raw x-axis and impulse train is showing weak/ambiguous alignment. Possible causes:
+**Best axis**: Y (peak ratio: 1.26, still below 2.0 target)
+**Assessment**: ALL axes show weak correlation - problem is more fundamental
 
-### Hypothesis 1: Simple impulse train is too crude
-**Evidence**: 
-- Expected signal is just delta functions (single-sample impulses)
-- Real accelerometer response to a step is not instantaneous
-- Each foot step likely produces a bipolar pulse (acceleration + deceleration)
+## Diagnosis: Why is correlation weak across ALL axes?
 
-**Proposed solution**: Apply a minimal kernel to impulses to mimic physical response
-- Option A: Derivative-like bipolar pulse (+ followed by -)
-- Option B: Short Gaussian pulse (~50-100ms width)
-- Option C: Measured impulse response from a known aligned region
+Since kernel shape and axis selection don't help, the problem is more fundamental. Possible root causes:
 
-### Hypothesis 2: X-axis may not be the dominant axis for steps
+### Hypothesis 1: Expected signal timing is wrong ⭐ MOST LIKELY
 **Evidence**:
-- Need to inspect which axis shows strongest correlation with steps
-- Phone orientation during gameplay is unknown
+- All offsets found are around 30s (x: 30.42s, y: 30.41s, z: 30.55s)
+- These are suspiciously consistent across axes
+- But correlation is still weak even at these offsets
 
-**Proposed solution**: 
-- Try Y-axis and Z-axis separately
-- Try magnitude (as original script did)
-- Document phone placement/orientation
+**Root cause possibilities**:
+a) **BPM from .sm file doesn't match actual gameplay tempo**
+   - Player may have used speed modifiers
+   - .sm file BPM might be incorrect
+   
+b) **OFFSET field in .sm is not the actual recording start offset**
+   - OFFSET (1.764s) is for music file, not sensor recording
+   - Sensor recording likely started BEFORE music began
+   - The 30s offset we detect is probably: time_before_music_starts + .sm_offset
 
-### Hypothesis 3: Timing assumptions are incorrect
+c) **Player reaction time delay**
+   - Notes in .sm file represent when to press
+   - Sensor captures actual foot movement (later than visual cue)
+   - Typical DDR reaction time: 100-300ms
+
+**Proposed solution - MANUAL VERIFICATION** (Option 3):
+1. Visually inspect raw signal around detected offset (~41s = 30.4s + 11.3s first note)
+2. Look for periodic patterns matching note density
+3. Count peaks in a known high-density region
+4. Compare to expected note count from .sm
+
+### Hypothesis 2: Single-axis signals are too noisy
 **Evidence**:
-- BPM or offset from .sm file might not match actual gameplay
-- Player may have started late/early
-- Sensor recording may have started before/after song
+- Magnitude didn't help (actually worse: ratio=1.00)
+- Individual axes all weak
+- Suggests signal is genuinely noisy/variable
 
 **Proposed solution**:
-- Manually inspect raw signal around expected first note time
-- Check if visual patterns in raw signal match note density from .sm
-- Verify BPM by measuring periodicity in raw signal during high-density regions
+- Try derivative of signal (velocity → acceleration response)
+- Try bandpass filtered version (remove drift + noise)
+- BUT: violates "minimal preprocessing" principle
 
-### Hypothesis 4: Raw signal needs minimal preprocessing
+### Hypothesis 3: Phone orientation/placement varies
 **Evidence**:
-- DC offset and slow drift visible in raw x signal
-- High-frequency noise may be masking correlation
+- Unknown where phone was placed during capture
+- Axis directions relative to body movement unknown
+- Could explain why no single axis dominates
 
-**Proposed solution** (only if justified):
-- Remove DC offset (mean subtraction) - ALREADY DONE in correlation
-- High-pass filter to remove drift (>0.5 Hz)
-- Low-pass filter to remove sensor noise (<20 Hz)
+**Proposed solution**:
+- Need metadata about phone placement
+- Or: Use PCA to find dominant movement axis
+- Or: Accept this is a limitation and use all axes
 
-## Decision Required
+### Hypothesis 4: Not all notes create equal sensor response
+**Evidence**:
+- Different arrow directions (left/down/up/right) create different movements
+- Expected signal treats all notes equally
+- Reality: some movements are subtle, others are strong
 
-Before proceeding, please specify which approach to try:
+**Proposed solution**:
+- Weight expected signal by arrow type
+- BUT: requires assumption about which arrows are "stronger"
+- Violates minimal assumptions principle
 
-### Option 1: Improve expected signal shape (RECOMMENDED FIRST)
-Add a minimal physical kernel to impulses to better match accelerometer response.
+## RECOMMENDED NEXT STEP: Manual Visual Verification
 
-**Command to run after modification**:
-```bash
-python align_x_axis.py "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" Medium
+Before adding more heuristics, we need to understand if the detected offset (~30.4s) is approximately correct.
+
+### Create a diagnostic visualization script:
+
+```python
+# Create: verify_alignment_visual.py
+# Shows raw signal, expected signal, and zoomed windows around:
+# 1. Detected offset + first note time (~41s)
+# 2. High-density note region (find from .sm)
+# 3. Low-density region (for comparison)
 ```
 
-### Option 2: Test other axes
-Modify script to allow axis selection (x, y, z, or magnitude).
+### Questions to answer from visual inspection:
 
-**Commands to run**:
-```bash
-python align_x_axis.py --axis y "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" Medium
-python align_x_axis.py --axis z "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" Medium
-python align_x_axis.py --axis magnitude "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" Medium
-```
+1. **At ~41s (detected first note time), is there visible activity in sensor data?**
+   - YES → Offset roughly correct, but correlation is weak for other reasons
+   - NO → Offset is wrong, need different alignment method
 
-### Option 3: Manual verification of timing
-Inspect alignment overlay more carefully and check if patterns are visible by eye.
+2. **Do high-activity regions in sensor data align with high-note-density regions from .sm?**
+   - YES → Timing is approximately correct, notes just don't correlate 1:1 with sensor peaks
+   - NO → Timing is systematically wrong (BPM error, speed modifier, etc.)
 
-**Questions to answer**:
-1. Can you see periodic patterns in raw x signal during gameplay (20-60s in overlay)?
-2. Do high-density note regions (visible in expected signal) correspond to high activity in raw signal?
-3. Should we zoom into specific time windows for verification?
+3. **Can you visually count peaks in a 10-second window and compare to note count?**
+   - If counts match roughly → alignment is good, correlation is just weak due to noise/variability
+   - If counts don't match → fundamental timing problem
 
-### Option 4: Add minimal preprocessing
-Add justified preprocessing (e.g., high-pass filter for drift, derivative of signal).
+4. **Is there periodicity in the sensor data matching the expected BPM (126)?**
+   - Beat period = 60/126 = 0.476s
+   - Check if peaks occur roughly every 0.5s during dense sections
 
-**Trade-off**: More processing = less "raw", but may reveal clearer patterns
+### Decision point after visual verification:
 
-## Recommendation
+**IF visual inspection confirms alignment is approximately correct:**
+→ Problem is: individual notes don't create distinct sensor peaks (too noisy, too variable)
+→ Solution: Accept weak correlation as reality, use alignment anyway
+→ OR: Try different features (envelope, spectral, etc.) - but violates minimalism
 
-Start with **Option 1** (improve expected signal shape) because:
-1. It's the most likely cause - impulses are too simplistic
-2. It stays true to "minimal" approach
-3. It's a justified physical assumption (steps create acceleration/deceleration)
-4. Easy to test and compare results
+**IF visual inspection shows timing is wrong:**
+→ Problem is: .sm timing doesn't match actual gameplay
+→ Solution: Need to find correct BPM/offset
+→ Method: Manual annotation of a few known notes, or audio sync
 
-Specifically, try a **derivative-like bipolar kernel**: each step creates both acceleration (positive) and deceleration (negative) in quick succession (~100ms apart).
+## Implementation Request
 
-Please confirm or specify an alternative approach.
+Please run Option 3 (Manual Verification) by creating the diagnostic visualization script.
+
+After seeing the visual evidence, we can make an informed decision about whether:
+- The current alignment is "good enough" despite weak correlation
+- We need a completely different approach
+- There's a systematic timing error to fix
