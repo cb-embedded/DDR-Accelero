@@ -25,8 +25,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+# Constants for alignment verification
+MIN_MATCH_THRESHOLD = 0.5  # Minimum fraction of words that must match for song name matching
+CORRELATION_PLOT_TIME_RANGE = 20  # Time range (±seconds) to display in correlation plots
+
+
 def extract_song_name(filename):
-    """Extract song name from filename."""
+    """Extract song name from filename.
+    
+    Expected filename format: SongName_Difficulty_Level_OptionalSuffix-Date_Time.ext
+    Example: Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip
+    """
     # Remove difficulty and date suffix
     name = re.sub(r'_\d+_?(Medium|Easy|Hard|Expert)?.*-\d{4}-\d{2}-\d{2}.*', '', filename)
     name = name.replace('_', ' ')
@@ -52,7 +61,7 @@ def find_matching_sm_file(sensor_file, sm_dir):
     for sm_file in sm_dir.glob('*.sm'):
         sm_name = sm_file.stem.lower().replace('_', ' ').replace('-', ' ')
         score = sum(1 for word in words if word in sm_name)
-        if score > best_score and score >= len(words) * 0.5:  # At least 50% match
+        if score > best_score and score >= len(words) * MIN_MATCH_THRESHOLD:
             best_score = score
             best_match = sm_file
     
@@ -142,7 +151,7 @@ def process_alignment(sensor_file, sm_file, output_dir):
         ax.set_title('Cross-correlation for Alignment', fontsize=12, fontweight='bold')
         ax.legend(fontsize=10)
         ax.grid(True, alpha=0.3)
-        ax.set_xlim([-20, 20])
+        ax.set_xlim([-CORRELATION_PLOT_TIME_RANGE, CORRELATION_PLOT_TIME_RANGE])
         
         plt.tight_layout()
         

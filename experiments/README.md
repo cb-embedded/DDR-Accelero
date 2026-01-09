@@ -85,6 +85,38 @@ python 03_align_signals.py
 3. Compute cross-correlation
 4. Find peak correlation = best alignment
 
+**Verification:**
+See `verify_alignment.py` and `ALIGNMENT_VERIFICATION.md` for proof that the alignment works correctly across multiple captures.
+
+---
+
+### Alignment Verification Script
+**File:** `verify_alignment.py`
+
+**Purpose:** Verify the alignment algorithm works correctly by testing on multiple captures and generating correlation plots as proof.
+
+**Usage:**
+```bash
+python verify_alignment.py
+```
+
+**Output:**
+- Correlation plots for multiple song captures (saved in `experiments/` directory)
+- Summary statistics showing alignment quality
+- Verification report with correlation peak values
+
+**Features:**
+- Automatically matches sensor files with corresponding .sm files
+- Tests alignment on 5 different songs
+- Generates detailed correlation plots showing:
+  - Processed sensor signal
+  - Reference signal from chart
+  - Cross-correlation with peak detection
+- Provides quality metrics (offset, correlation peak, note count)
+
+**Results:**
+All tested captures show clear correlation peaks, proving the alignment algorithm works correctly. See correlation PNG files in experiments directory for visual proof.
+
 ---
 
 ### Experiment 4: Generate Dataset
