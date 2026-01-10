@@ -67,9 +67,13 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
         X, Y, arrow_offsets, _ = create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=window_size)
         
         print(f"  Samples: {len(X)}")
-        all_X.append(X)
-        all_Y.append(Y)
-        all_offsets.append(arrow_offsets)
+        # Skip captures with no samples
+        if len(X) > 0:
+            all_X.append(X)
+            all_Y.append(Y)
+            all_offsets.append(arrow_offsets)
+        else:
+            print(f"  Warning: Skipping capture with 0 samples")
     
     # Combine all datasets
     X = np.concatenate(all_X, axis=0)
@@ -196,8 +200,8 @@ def train_cnn_model(X_train, Y_train, offsets_train, X_val, Y_val, offsets_val, 
     criterion_offset = nn.MSELoss()  # Mean Squared Error for regression
     
     # Loss weights (can be tuned)
-    weight_arrows = 1.0
-    weight_offset = 10.0  # Increase weight to make offset prediction more important
+    weight_arrows = 5.0  # Increase weight to focus more on arrow accuracy
+    weight_offset = 1.0  # Offset prediction is already good
     
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
@@ -852,7 +856,7 @@ def main():
     print("="*70)
     model, history = train_cnn_model(X_train, Y_train, offsets_train, 
                                      X_val, Y_val, offsets_val,
-                                     epochs=50, batch_size=32, lr=0.001)
+                                     epochs=100, batch_size=32, lr=0.001)
     
     # Plot training history
     print("\nPlotting training history...")
