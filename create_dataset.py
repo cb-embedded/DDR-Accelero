@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
 import zipfile
+from align_clean import align_capture
 
 
 def load_sensor_data(capture_path, dt=0.01):
@@ -54,28 +54,29 @@ def load_sensor_data(capture_path, dt=0.01):
     return t_i, sensors
 
 
-def parse_sm_file(sm_path, diff_level):
+def parse_sm_file(sm_path, diff_level, diff_type='medium'):
     """Parse SM file and extract arrow events with timing."""
     with open(sm_path, "r", encoding="utf-8", errors="ignore") as f:
         text = f.read()
     
-    # Extract BPM
+    # Extract BPM (use first BPM value if multiple)
     bpm_line = [l for l in text.splitlines() if l.startswith("#BPMS:")][0]
-    bpm = float(bpm_line.split(":")[1].split(";")[0].split("=")[1])
+    bpm_str = bpm_line.split(":")[1].split(";")[0].split("=")[1].split(",")[0]
+    bpm = float(bpm_str)
     sec_per_beat = 60.0 / bpm
     
-    # Find Medium chart at specified level
+    # Find chart at specified difficulty type and level
     blocks = text.split("#NOTES:")[1:]
     chart = None
     for b in blocks:
         lines = [l.strip() for l in b.splitlines() if l.strip()]
         if len(lines) >= 6:
-            if lines[2].strip(":").lower() == "medium" and int(lines[3].strip(":")) == diff_level:
+            if lines[2].strip(":").lower() == diff_type.lower() and int(lines[3].strip(":")) == diff_level:
                 chart = lines[5:]
                 break
     
     if chart is None:
-        raise ValueError(f"Could not find Medium chart with difficulty {diff_level}")
+        raise ValueError(f"Chart not found: {diff_type} level {diff_level}")
     
     # Parse measures
     measures = []
@@ -109,59 +110,6 @@ def parse_sm_file(sm_path, diff_level):
             t += (4 * sec_per_beat) / n
     
     return np.array(times), np.array(arrows), bpm
-
-
-def align_with_biomechanical(t_sensor, ax, t_chart, arrows, dt=0.01):
-    """
-    Align sensor data with arrow events using biomechanical approach.
-    Uses LEFT ARROW ONLY as in align_clean.py.
-    Returns time offset.
-    """
-    TAU = 0.10         # biomechanical time constant (s)
-    BP_LOW = 0.5       # bandpass low (Hz)
-    BP_HIGH = 8.0      # bandpass high (Hz)
-    
-    # Normalize accelerometer
-    ax_norm = (ax - ax.mean()) / ax.std()
-    
-    # Create left arrow signal
-    left_arrows = arrows[:, 0]  # First column is left arrow
-    
-    # Resample to uniform grid
-    t_chart_i = np.arange(t_chart.min(), t_chart.max(), dt)
-    s_i = np.interp(t_chart_i, t_chart, left_arrows)
-    
-    # Biomechanical transformation
-    # 1) Edge events
-    e = np.diff(s_i, prepend=0)
-    
-    # 2) Exponential decay kernel (causal)
-    k_t = np.arange(0, 0.5, dt)
-    kernel = np.exp(-k_t / TAU)
-    kernel /= kernel.sum()
-    
-    # 3) Convolution
-    p = np.convolve(e, kernel, mode="same")
-    
-    # 4) Bandpass filter
-    fs = 1.0 / dt
-    b, a = butter(2, [BP_LOW/(fs/2), BP_HIGH/(fs/2)], btype="band")
-    p = filtfilt(b, a, p)
-    
-    p = (p - p.mean()) / p.std()
-    
-    # FFT correlation
-    n = min(len(ax_norm), len(p))
-    ax_corr = ax_norm[:n]
-    p_corr = p[:n]
-    
-    corr = np.fft.ifft(np.fft.fft(ax_corr) * np.conj(np.fft.fft(p_corr))).real
-    lags = np.arange(n) * dt
-    
-    peak_idx = np.argmax(corr)
-    offset = lags[peak_idx]
-    
-    return offset
 
 
 def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0):
@@ -232,10 +180,10 @@ def visualize_sample(idx, X_sample, Y_sample, t_center, t_arrows, arrows,
     window_samples = X_sample.shape[0] // 2
     t_window = np.arange(-window_samples, window_samples) * dt
     
-    fig = plt.figure(figsize=(16, 12))
+    fig = plt.figure(figsize=(16, 13))
     
-    # Create grid: 9 sensor plots + 1 chronogram
-    gs = fig.add_gridspec(5, 2, hspace=0.3, wspace=0.3)
+    # Create grid: 9 sensor plots + 4 arrow chronograms
+    gs = fig.add_gridspec(6, 2, hspace=0.4, wspace=0.3, height_ratios=[1, 1, 1, 1, 0.8, 0.8])
     
     channel_names = ['Accel X', 'Accel Y', 'Accel Z',
                      'Gyro X', 'Gyro Y', 'Gyro Z',
@@ -250,39 +198,56 @@ def visualize_sample(idx, X_sample, Y_sample, t_center, t_arrows, arrows,
         ax.set_title(channel_names[i], fontsize=10)
         ax.set_xlabel('Time (s)', fontsize=8)
         ax.grid(True, alpha=0.3)
-        ax.axvline(0, color='r', linestyle='--', linewidth=1, alpha=0.5)
+        ax.axvline(0, color='r', linestyle='--', linewidth=1.5, alpha=0.7, label='Label time')
     
-    # Plot arrow chronogram
-    ax_chrono = fig.add_subplot(gs[4, :])
+    # Plot arrow chronograms - one line per arrow type
+    ax_chrono = fig.add_subplot(gs[4:, :])
     
-    # Show arrows in time window
     arrow_names = ['Left', 'Down', 'Up', 'Right']
-    colors = ['blue', 'green', 'orange', 'red']
+    colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728']  # Blue, Green, Orange, Red
+    markers = ['o', 's', '^', 'D']  # Circle, Square, Triangle, Diamond
+    marker_sizes = [8, 8, 10, 8]
+    
+    # Define y-positions for each arrow type (4 horizontal lines)
+    y_positions = [3, 2, 1, 0]
     
     # Plot all arrows in the vicinity
     t_min_plot = t_center - window_size * 2
     t_max_plot = t_center + window_size * 2
     
-    for i, arrow_name in enumerate(arrow_names):
-        # Find arrows in plot range
+    for arrow_idx, arrow_name in enumerate(arrow_names):
+        y_pos = y_positions[arrow_idx]
+        
+        # Draw horizontal line for this arrow type
+        ax_chrono.axhline(y_pos, color='gray', linestyle=':', linewidth=0.8, alpha=0.5)
+        
+        # Plot all arrow events of this type in the time window
         for j, t_arr in enumerate(t_arrows):
-            if t_min_plot <= t_arr <= t_max_plot and arrows[j][i] == 1:
-                ax_chrono.axvline(t_arr - t_center, color=colors[i], 
-                                 alpha=0.3, linewidth=2)
+            if t_min_plot <= t_arr <= t_max_plot and arrows[j][arrow_idx] == 1:
+                t_rel = t_arr - t_center
+                # Use different style for label vs other arrows
+                if abs(t_rel) < 0.001:  # This is the center label
+                    ax_chrono.plot(t_rel, y_pos, marker=markers[arrow_idx], 
+                                  color=colors[arrow_idx], markersize=marker_sizes[arrow_idx]*2,
+                                  markeredgewidth=2.5, markeredgecolor='black',
+                                  label=f'{arrow_name} (LABEL)', zorder=10)
+                else:
+                    ax_chrono.plot(t_rel, y_pos, marker=markers[arrow_idx], 
+                                  color=colors[arrow_idx], markersize=marker_sizes[arrow_idx],
+                                  alpha=0.6, markeredgewidth=0.5, markeredgecolor='black')
     
-    # Highlight the center arrow (label)
-    for i, arrow_name in enumerate(arrow_names):
-        if Y_sample[i] == 1:
-            ax_chrono.axvline(0, color=colors[i], linestyle='-', 
-                            linewidth=3, label=f'{arrow_name} (LABEL)')
+    # Add vertical line at center (t=0)
+    ax_chrono.axvline(0, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Center (t=0)')
     
     ax_chrono.set_xlim([-window_size, window_size])
-    ax_chrono.set_xlabel('Time relative to center (s)', fontsize=10)
-    ax_chrono.set_ylabel('Arrow Events', fontsize=10)
-    ax_chrono.set_title(f'Arrow Chronogram - Label: {[arrow_names[i] for i, v in enumerate(Y_sample) if v == 1]}', 
-                       fontsize=11)
-    ax_chrono.legend(fontsize=8)
-    ax_chrono.grid(True, alpha=0.3)
+    ax_chrono.set_ylim([-0.5, 3.5])
+    ax_chrono.set_yticks(y_positions)
+    ax_chrono.set_yticklabels(arrow_names)
+    ax_chrono.set_xlabel('Time relative to center (s)', fontsize=11)
+    ax_chrono.set_ylabel('Arrow Type', fontsize=11)
+    ax_chrono.set_title('Arrow Chronogram (○=Left, □=Down, △=Up, ◇=Right)', fontsize=11, fontweight='bold')
+    ax_chrono.legend(fontsize=9, loc='upper right')
+    ax_chrono.grid(True, alpha=0.3, axis='x')
     
     # Add text with label info
     label_str = '+'.join([arrow_names[i] for i, v in enumerate(Y_sample) if v == 1])
@@ -322,13 +287,14 @@ def main():
     
     # Parse SM file
     print("\n[2/5] Parsing .sm file...")
-    t_arrows, arrows, bpm = parse_sm_file(sm_path, diff_level)
+    t_arrows, arrows, bpm = parse_sm_file(sm_path, diff_level, diff_type='medium')
     print(f"  BPM: {bpm}, Arrow events: {len(t_arrows)}")
     
-    # Align using biomechanical approach
+    # Align using refactored align_capture function
     print("\n[3/5] Aligning sensor data with arrows...")
-    offset = align_with_biomechanical(t_sensor, sensors['acc_x'], t_arrows, arrows)
-    print(f"  Offset: {offset:.3f}s")
+    result = align_capture(capture_path, sm_path, diff_level, diff_type='medium', verbose=False)
+    offset = result['offset']
+    print(f"  Offset: {offset:.3f}s (ratio: {result['ratio']:.2f}, z: {result['z_score']:.2f})")
     
     # Create dataset
     print("\n[4/5] Creating dataset...")
