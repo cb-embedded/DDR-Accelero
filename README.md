@@ -18,6 +18,8 @@ Successfully achieved alignment with dominant correlation peaks:
 
 ## Usage
 
+### Alignment Tool
+
 ```bash
 python align_clean.py <capture_zip> <sm_file> <difficulty_level>
 ```
@@ -32,6 +34,28 @@ python align_clean.py "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_
 - `sm_file`: Path to StepMania .sm chart file
 - `difficulty_level`: Numeric difficulty level (e.g., 5 for Medium-5)
 
+### Dataset Creation Tool
+
+```bash
+python create_dataset.py <capture_zip> <sm_file> <difficulty_level> <num_samples>
+```
+
+**Example:**
+```bash
+python create_dataset.py "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" 5 10
+```
+
+**Arguments:**
+- `capture_zip`: Path to sensor capture zip file (containing Gravity.csv, Gyroscope.csv, Magnetometer.csv)
+- `sm_file`: Path to StepMania .sm chart file
+- `difficulty_level`: Numeric difficulty level (e.g., 5 for Medium-5)
+- `num_samples`: Number of sample visualizations to generate (e.g., 10)
+
+**Output:**
+- Console: Dataset statistics (number of samples, shapes)
+- PNG files: Visualization of sample windows with sensor data and arrow labels
+- Dataset in memory: X (sensor windows) and Y (arrow labels)
+
 ## Method
 
 The solution uses a **biomechanical model**:
@@ -43,9 +67,23 @@ The solution uses a **biomechanical model**:
 
 ## Output
 
+### Alignment Tool Output
 Computes time offset between sensor recording and chart:
 - Console: offset, peak ratio, z-score
 - PNG: correlation plot showing clear peak
+
+### Dataset Tool Output
+Creates a labeled dataset from aligned sensor data:
+- **X**: Sensor data windows [N × window_length × 9 channels]
+  - 9 channels: accelerometer (x,y,z), gyroscope (x,y,z), magnetometer (x,y,z)
+  - Window: centered on arrow event with configurable size (default ±1s)
+- **Y**: Arrow labels [N × 4]
+  - 4 arrows: [Left, Down, Up, Right] (binary: 1=pressed, 0=not pressed)
+  - Supports single and double arrow events
+- **Visualizations**: PNG files showing:
+  - 9 sensor channel plots with red vertical line at label time (t=0)
+  - Arrow chronogram showing nearby arrow events
+  - Highlighted label arrows in the legend
 
 ## Requirements
 
@@ -59,10 +97,11 @@ Dependencies: numpy, pandas, scipy, matplotlib
 
 ```
 DDR-Accelero/
-├── align_clean.py          # Working alignment solution
+├── align_clean.py          # Alignment solution (finds time offset)
+├── create_dataset.py       # Dataset creation tool (creates labeled samples)
 ├── raw_data/               # Sensor captures (.zip from Android Sensor Logger)
 ├── sm_files/               # StepMania charts (.sm files)
-└── artifacts/              # Generated correlation plots (2 examples)
+└── artifacts/              # Generated plots and visualizations
 ```
 
 ## Key Insight
