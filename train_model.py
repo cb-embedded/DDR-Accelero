@@ -241,6 +241,66 @@ def print_results(metrics, Y_train):
         total = len(metrics['Y_test'])
         print(f"  {name:5s}: {count}/{total} ({count/total*100:.1f}%)")
     
+    # Add interpretation of results
+    print("\n" + "="*70)
+    print("RESULTS INTERPRETATION")
+    print("="*70)
+    
+    rel_improvement = (metrics['average_accuracy'] - random_baseline) / random_baseline * 100
+    
+    print(f"\n1. OVERALL PERFORMANCE:")
+    print(f"   • Relative improvement: +{rel_improvement:.1f}% over random")
+    
+    if rel_improvement > 15:
+        print(f"   • Assessment: EXCELLENT - Strong predictive signal detected")
+    elif rel_improvement > 10:
+        print(f"   • Assessment: GOOD - Clear predictive capability")
+    elif rel_improvement > 5:
+        print(f"   • Assessment: MODERATE - Promising but needs improvement")
+    else:
+        print(f"   • Assessment: WEAK - Limited predictive capability")
+    
+    print(f"\n2. TASK DIFFICULTY:")
+    print(f"   • Multi-label classification (4 independent arrows)")
+    print(f"   • Real-world noisy sensor data from mobile device")
+    print(f"   • No temporal alignment guarantees beyond biomechanical model")
+    print(f"   • Complex human movement patterns with individual variations")
+    
+    print(f"\n3. CONTEXT & SIGNIFICANCE:")
+    if metrics['average_accuracy'] > 0.65:
+        print(f"   • This demonstrates clear sensor-to-arrow correlation")
+        print(f"   • Model learns meaningful patterns from accelerometer/gyro/mag data")
+        print(f"   • Achievable with simple statistical features (no deep learning)")
+    else:
+        print(f"   • Results show limited but detectable signal")
+        print(f"   • More sophisticated features or models may improve performance")
+    
+    print(f"\n4. ARROW-SPECIFIC INSIGHTS:")
+    best_arrow = np.argmax(metrics['per_arrow_accuracy'])
+    worst_arrow = np.argmin(metrics['per_arrow_accuracy'])
+    arrow_names = metrics['arrow_names']
+    
+    print(f"   • Best: {arrow_names[best_arrow]} ({metrics['per_arrow_accuracy'][best_arrow]:.1%})")
+    print(f"   • Worst: {arrow_names[worst_arrow]} ({metrics['per_arrow_accuracy'][worst_arrow]:.1%})")
+    print(f"   • Vertical arrows (Up/Down) often easier to detect (phone vertical movement)")
+    print(f"   • Horizontal arrows (Left/Right) may have similar sensor patterns")
+    
+    print(f"\n5. PRACTICAL IMPLICATIONS:")
+    if metrics['average_accuracy'] > 0.65:
+        print(f"   • Model is ready for proof-of-concept deployment")
+        print(f"   • Can assist players by predicting next moves")
+        print(f"   • Could enable automated gameplay analysis")
+    else:
+        print(f"   • Current model needs refinement before practical use")
+        print(f"   • Consider: more data, feature engineering, or CNN/LSTM models")
+    
+    print(f"\n6. NEXT STEPS FOR IMPROVEMENT:")
+    print(f"   • Collect more diverse training data (different songs/players)")
+    print(f"   • Try CNN/LSTM to capture temporal patterns directly")
+    print(f"   • Engineer features specific to movement biomechanics")
+    print(f"   • Apply data augmentation to increase training samples")
+    print(f"   • Investigate per-player calibration/adaptation")
+    
     print("="*70)
 
 
