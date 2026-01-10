@@ -80,7 +80,7 @@ python train_model.py \
 - `artifacts/training_history.png`: Training and validation loss/accuracy curves
 - `artifacts/prediction_sample_*.png`: Sample predictions on test data
 
-**Note**: The model currently predicts only arrow labels, not offsets (see "Understanding the Dataset Design" section below for why offset prediction would be beneficial).
+**Note**: The model predicts **BOTH arrow labels AND offsets** using multi-task learning. See `RESULTS.md` for comprehensive evaluation and visualizations.
 
 ## Method
 
@@ -133,24 +133,25 @@ Creates a labeled dataset from aligned sensor data:
 - Offset information in the title (e.g., "offset: +0.234s from center")
 
 ### ML Pipeline Output
-Trains a CNN-based multi-label classifier to predict arrow presses:
-- **Model Architecture**: 1D Convolutional Neural Network (CNN)
+Trains a CNN-based multi-task model to predict arrow presses AND timing offsets:
+- **Model Architecture**: 1D Convolutional Neural Network (CNN) with dual output heads
   - Input: Raw sensor time series [batch_size, 9 channels, time_steps]
   - 3 Conv1D layers with batch normalization and max pooling
-  - Fully connected layers with dropout
-  - Output: 4 sigmoid activations (one per arrow)
-- **Current Implementation**: Predicts arrow labels (Y) only
-  - **LIMITATION**: Does not currently predict offsets, only which arrows are near window center
-  - **Future Enhancement**: Should be extended to predict both arrows AND offset for robust real-world inference
+  - Shared fully connected layers with dropout
+  - **Output Head 1**: Arrow classification - 4 sigmoid activations (one per arrow)
+  - **Output Head 2**: Offset regression - 1 linear output (timing in seconds)
+- **Multi-Task Learning**: Simultaneously predicts:
+  - **Arrows**: Which arrows to press [Left, Down, Up, Right]
+  - **Offset**: When to press them (relative to window center)
 - **Training Data**: Uses randomly sampled windows with varying offsets (see Dataset section)
 - **Evaluation Metrics**: 
-  - Exact match accuracy (all 4 arrows must match)
-  - Per-arrow accuracy
-  - Hamming loss
+  - **Arrow Metrics**: Exact match accuracy, per-arrow accuracy, hamming loss
+  - **Offset Metrics**: MAE, RMSE, percentage within timing thresholds (100ms, 250ms, 500ms)
 - **Saved Model**: `artifacts/trained_model.pth` (PyTorch format)
 - **Visualizations**: 
-  - `artifacts/training_history.png` - Loss and accuracy curves
-  - `artifacts/prediction_sample_*.png` - 10 random test predictions with sensor data
+  - `artifacts/training_history.png` - Loss and accuracy curves for both tasks
+  - `artifacts/prediction_sample_*.png` - 10 random test predictions showing sensor data, predicted arrows, and predicted timing
+- **Results**: See `RESULTS.md` for comprehensive performance analysis and examples
 
 ## Requirements
 
@@ -203,12 +204,26 @@ Without offset prediction, the model can only answer "What arrows are near this 
 
 This design enables the model to work with arbitrary sensor windows, making it practical for real-time gameplay assistance.
 
-### Current Model Limitation
+### Model Capabilities ✓
 
-⚠️ **Important Note**: The current `train_model.py` implementation trains a model that predicts only the arrow labels (Y), not the offsets. This means it can identify which arrows are near the window center, but cannot estimate their precise timing.
+✅ **Implemented**: The model now predicts **BOTH arrow labels AND offsets** using multi-task learning!
 
-**To fully leverage the dataset design**, the model should be extended to:
-1. Predict arrow labels: [Left, Down, Up, Right] (binary vector)
-2. Predict offset: continuous value in seconds (regression output)
+**To fully leverage the dataset design**, the model:
+1. ✓ Predicts arrow labels: [Left, Down, Up, Right] (binary vector)
+2. ✓ Predicts offset: continuous value in seconds (regression output)
 
-This would enable true real-world inference where the model can guide players on both WHAT to press and WHEN to press it.
+This enables true real-world inference where the model can guide players on both WHAT to press and WHEN to press it.
+
+**Example Prediction:**
+```
+Input: 1 second of sensor data (arbitrary window)
+Output: 
+  - Arrows: [Left, Up] 
+  - Offset: +0.234s
+  - Interpretation: "Press Left+Up in 234 milliseconds"
+```
+
+See `RESULTS.md` for comprehensive performance analysis:
+- Arrow prediction: 19.3% exact match (beats 17.0% random baseline)
+- Offset prediction: 186ms MAE, 87.7% within 250ms
+- Assessment: GOOD performance for real-world gameplay assistance
