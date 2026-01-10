@@ -203,56 +203,58 @@ def print_results(metrics, Y_train):
     print("EVALUATION RESULTS")
     print("="*70)
     
-    # Calculate random baseline
-    # For multi-label, we need to consider the label distribution
-    label_dist = np.mean(Y_train, axis=0)
+    # Calculate random baseline for EXACT MATCH (entire combination)
+    # Count the frequency of each unique combination
+    Y_train_tuples = [tuple(row) for row in Y_train]
+    Y_test_tuples = [tuple(row) for row in metrics['Y_test']]
     
-    # Random baseline: predict based on training distribution
-    random_per_arrow = []
-    for i, prob in enumerate(label_dist):
-        # Accuracy when predicting randomly with correct probability
-        random_acc = prob * prob + (1-prob) * (1-prob)
-        random_per_arrow.append(random_acc)
+    from collections import Counter
+    train_combo_counts = Counter(Y_train_tuples)
     
-    random_baseline = np.mean(random_per_arrow)
+    # Calculate expected accuracy if randomly guessing based on training distribution
+    exact_match_random_baseline = 0.0
+    for combo in set(Y_test_tuples):
+        # Probability of this combo in training set
+        prob_train = train_combo_counts.get(combo, 0) / len(Y_train)
+        # Count how many times this combo appears in test
+        count_test = Y_test_tuples.count(combo)
+        # Add to expected correct predictions
+        exact_match_random_baseline += prob_train * count_test
+    
+    exact_match_random_baseline /= len(metrics['Y_test'])
     
     # CLEARER BASELINE EXPLANATION
     print("\n" + "-"*70)
-    print("RANDOM BASELINE EXPLANATION (for non-experts)")
+    print("EVALUATION METRIC: EXACT COMBINATION MATCH")
     print("-"*70)
-    print("\nThis is NOT a simple 1/4 (25%) chance problem!")
-    print("\nWhy? Because:")
-    print("  • Each sample can have MULTIPLE arrows pressed simultaneously")
-    print("  • We predict 4 INDEPENDENT yes/no decisions (Left, Down, Up, Right)")
-    print("  • Example: a sample could be [Left+Up] = [1,0,1,0]")
-    print("\nRandom baseline calculation:")
-    print(f"  • If we guess randomly based on training data frequencies:")
-    for i, name in enumerate(metrics['arrow_names']):
-        prob = label_dist[i]
-        print(f"    - {name}: appears {prob:.1%} of the time → random accuracy = {random_per_arrow[i]:.1%}")
-    print(f"  • Average random accuracy: {random_baseline:.1%}")
-    print("\nSo random guessing gives ~59-60%, NOT 25%!")
+    print("\nIMPORTANT: We evaluate by predicting the EXACT arrow combination!")
+    print("\nExamples:")
+    print("  • TRUE: Left only [1,0,0,0]  →  PREDICTED: Left only [1,0,0,0]  ✓ CORRECT")
+    print("  • TRUE: Left only [1,0,0,0]  →  PREDICTED: Left+Up [1,0,1,0]   ✗ WRONG")
+    print("  • TRUE: Left+Up [1,0,1,0]    →  PREDICTED: Left+Up [1,0,1,0]   ✓ CORRECT")
+    print("\nA prediction is correct ONLY if all 4 arrows match exactly.")
+    print("This is much harder than per-arrow accuracy!")
     print("-"*70)
     
-    print(f"\nBaseline (Random with training distribution): {random_baseline:.4f}")
-    print(f"Model Average Accuracy: {metrics['average_accuracy']:.4f}")
-    print(f"Improvement over baseline: {(metrics['average_accuracy'] - random_baseline):.4f}")
+    # Main metric: Exact Match
+    print(f"\n{'='*70}")
+    print(f"PRIMARY METRIC: EXACT COMBINATION MATCH ACCURACY")
+    print(f"{'='*70}")
+    print(f"\nRandom Baseline (guessing by training frequency): {exact_match_random_baseline:.4f} ({exact_match_random_baseline*100:.1f}%)")
+    print(f"Model Accuracy:                                   {metrics['exact_match']:.4f} ({metrics['exact_match']*100:.1f}%)")
+    print(f"Absolute Improvement:                             +{(metrics['exact_match'] - exact_match_random_baseline):.4f} (+{(metrics['exact_match'] - exact_match_random_baseline)*100:.1f}%)")
     
-    print(f"\nExact Match Accuracy: {metrics['exact_match']:.4f}")
-    print(f"Hamming Loss: {metrics['hamming_loss']:.4f}")
-    
-    print("\nPer-Arrow Accuracy:")
-    for i, name in enumerate(metrics['arrow_names']):
-        acc = metrics['per_arrow_accuracy'][i]
-        baseline = random_per_arrow[i]
-        improvement = acc - baseline
-        print(f"  {name:5s}: {acc:.4f} (baseline: {baseline:.4f}, +{improvement:.4f})")
+    if exact_match_random_baseline > 0:
+        rel_improvement = (metrics['exact_match'] - exact_match_random_baseline) / exact_match_random_baseline * 100
+        print(f"Relative Improvement:                             +{rel_improvement:.1f}%")
     
     # Check if better than random
-    if metrics['average_accuracy'] > random_baseline:
-        print("\n✓ Model performs BETTER than random baseline!")
+    if metrics['exact_match'] > exact_match_random_baseline:
+        print("\n✓✓✓ Model performs BETTER than random baseline!")
     else:
-        print("\n✗ Model does NOT outperform random baseline")
+        print("\n✗✗✗ Model does NOT outperform random baseline")
+    
+    print(f"{'='*70}")
     
     # Distribution in test set
     print("\nLabel Distribution in Test Set:")
@@ -261,9 +263,20 @@ def print_results(metrics, Y_train):
         total = len(metrics['Y_test'])
         print(f"  {name:5s}: {count}/{total} ({count/total*100:.1f}%)")
     
+    # Show most common combinations
+    print("\nMost Common Arrow Combinations in Test Set:")
+    test_combo_counts = Counter(Y_test_tuples)
+    arrow_names = metrics['arrow_names']
+    for combo, count in test_combo_counts.most_common(10):
+        combo_str = ' + '.join([arrow_names[i] for i, v in enumerate(combo) if v == 1])
+        if not combo_str:
+            combo_str = 'None'
+        pct = count / len(metrics['Y_test']) * 100
+        print(f"  {combo_str:20s}: {count:3d} ({pct:4.1f}%)")
+    
     # ANALYSIS OF DOUBLE/MULTIPLE PRESSES
     print("\n" + "-"*70)
-    print("DOUBLE/MULTIPLE ARROW ANALYSIS")
+    print("ANALYSIS BY NUMBER OF SIMULTANEOUS ARROWS")
     print("-"*70)
     
     # Count samples by number of arrows
@@ -281,81 +294,115 @@ def print_results(metrics, Y_train):
             print(f"  {n} arrows: {count} samples ({pct:.1f}%)")
     
     # Accuracy for single vs double/multiple
-    single_mask = num_arrows_true == 1
-    double_plus_mask = num_arrows_true >= 2
-    
-    if np.sum(single_mask) > 0:
-        single_acc = np.mean(np.all(Y_pred[single_mask] == Y_test[single_mask], axis=1))
-        print(f"\nAccuracy on SINGLE arrow presses: {single_acc:.1%}")
-    
-    if np.sum(double_plus_mask) > 0:
-        double_acc = np.mean(np.all(Y_pred[double_plus_mask] == Y_test[double_plus_mask], axis=1))
-        print(f"Accuracy on DOUBLE+ arrow presses: {double_acc:.1%}")
-        
-        if np.sum(single_mask) > 0:
-            print(f"\n→ Double presses are {'HARDER' if double_acc < single_acc else 'EASIER'} to predict")
+    print("\nExact Match Accuracy by Number of Arrows:")
+    for n in range(5):
+        mask = num_arrows_true == n
+        if np.sum(mask) > 0:
+            acc = np.mean(np.all(Y_pred[mask] == Y_test[mask], axis=1))
+            count = np.sum(mask)
+            print(f"  {n} arrow(s): {acc:.1%} ({count} samples)")
     
     print("-"*70)
     
-    # Add interpretation of results
+    # SECONDARY METRICS (for reference only)
+    print("\n" + "-"*70)
+    print("SECONDARY METRICS (for reference, not primary evaluation)")
+    print("-"*70)
+    
+    # Calculate per-arrow random baseline
+    label_dist = np.mean(Y_train, axis=0)
+    random_per_arrow = []
+    for i, prob in enumerate(label_dist):
+        random_acc = prob * prob + (1-prob) * (1-prob)
+        random_per_arrow.append(random_acc)
+    
+    per_arrow_random_baseline = np.mean(random_per_arrow)
+    
+    print(f"\nPer-Arrow Average Accuracy: {metrics['average_accuracy']:.4f}")
+    print(f"  (Random baseline: {per_arrow_random_baseline:.4f})")
+    print(f"\nHamming Loss (fraction of wrong arrows): {metrics['hamming_loss']:.4f}")
+    
+    print("\nPer-Arrow Breakdown:")
+    for i, name in enumerate(metrics['arrow_names']):
+        acc = metrics['per_arrow_accuracy'][i]
+        baseline = random_per_arrow[i]
+        print(f"  {name:5s}: {acc:.4f} (baseline: {baseline:.4f})")
+    
+    print("\nNote: Per-arrow metrics can be misleading because predicting")
+    print("'not pressed' is often correct, inflating accuracy.")
+    print("-"*70)
+    
+    # Add interpretation of results based on EXACT MATCH
     print("\n" + "="*70)
     print("RESULTS INTERPRETATION")
     print("="*70)
     
-    rel_improvement = (metrics['average_accuracy'] - random_baseline) / random_baseline * 100
+    # Calculate relative improvement for exact match
+    if exact_match_random_baseline > 0:
+        rel_improvement = (metrics['exact_match'] - exact_match_random_baseline) / exact_match_random_baseline * 100
+    else:
+        rel_improvement = float('inf') if metrics['exact_match'] > 0 else 0
     
-    print(f"\n1. OVERALL PERFORMANCE:")
-    print(f"   • Relative improvement: +{rel_improvement:.1f}% over random")
+    print(f"\n1. OVERALL PERFORMANCE (Exact Combination Match):")
+    print(f"   • Exact Match Accuracy: {metrics['exact_match']:.1%}")
+    print(f"   • Random Baseline: {exact_match_random_baseline:.1%}")
+    if exact_match_random_baseline > 0:
+        print(f"   • Relative improvement: +{rel_improvement:.1f}% over random")
     
-    if rel_improvement > 15:
-        print(f"   • Assessment: EXCELLENT - Strong predictive signal detected")
-    elif rel_improvement > 10:
-        print(f"   • Assessment: GOOD - Clear predictive capability")
-    elif rel_improvement > 5:
+    if rel_improvement > 100:
+        print(f"   • Assessment: EXCELLENT - Strong predictive capability")
+    elif rel_improvement > 50:
+        print(f"   • Assessment: GOOD - Clear predictive signal")
+    elif rel_improvement > 20:
         print(f"   • Assessment: MODERATE - Promising but needs improvement")
     else:
         print(f"   • Assessment: WEAK - Limited predictive capability")
     
     print(f"\n2. TASK DIFFICULTY:")
-    print(f"   • Multi-label classification (4 independent arrows)")
+    print(f"   • Exact combination matching (all 4 arrows must be correct)")
     print(f"   • Real-world noisy sensor data from mobile device")
     print(f"   • No temporal alignment guarantees beyond biomechanical model")
     print(f"   • Complex human movement patterns with individual variations")
     
     print(f"\n3. CONTEXT & SIGNIFICANCE:")
-    if metrics['average_accuracy'] > 0.65:
-        print(f"   • This demonstrates clear sensor-to-arrow correlation")
-        print(f"   • Model learns meaningful patterns from accelerometer/gyro/mag data")
+    if metrics['exact_match'] > 0.10:
+        print(f"   • Model demonstrates ability to predict full combinations")
+        print(f"   • Learns meaningful patterns from accelerometer/gyro/mag data")
         print(f"   • Achievable with simple statistical features (no deep learning)")
     else:
-        print(f"   • Results show limited but detectable signal")
-        print(f"   • More sophisticated features or models may improve performance")
+        print(f"   • Exact matching is very challenging with current approach")
+        print(f"   • Per-arrow predictions work better than full combinations")
+        print(f"   • More sophisticated models (CNN/LSTM) may improve performance")
     
-    print(f"\n4. ARROW-SPECIFIC INSIGHTS:")
-    best_arrow = np.argmax(metrics['per_arrow_accuracy'])
-    worst_arrow = np.argmin(metrics['per_arrow_accuracy'])
-    arrow_names = metrics['arrow_names']
+    print(f"\n4. COMBINATION-SPECIFIC INSIGHTS:")
+    # Find which combinations are predicted best
+    num_arrows_true = np.sum(Y_test, axis=1)
+    print(f"   • Single arrow samples: {np.sum(num_arrows_true == 1)} ({np.sum(num_arrows_true == 1)/len(Y_test)*100:.1f}%)")
+    if np.sum(num_arrows_true == 1) > 0:
+        single_acc = np.mean(np.all(Y_pred[num_arrows_true == 1] == Y_test[num_arrows_true == 1], axis=1))
+        print(f"     - Accuracy: {single_acc:.1%}")
     
-    print(f"   • Best: {arrow_names[best_arrow]} ({metrics['per_arrow_accuracy'][best_arrow]:.1%})")
-    print(f"   • Worst: {arrow_names[worst_arrow]} ({metrics['per_arrow_accuracy'][worst_arrow]:.1%})")
-    print(f"   • Vertical arrows (Up/Down) often easier to detect (phone vertical movement)")
-    print(f"   • Horizontal arrows (Left/Right) may have similar sensor patterns")
+    if np.sum(num_arrows_true >= 2) > 0:
+        multi_acc = np.mean(np.all(Y_pred[num_arrows_true >= 2] == Y_test[num_arrows_true >= 2], axis=1))
+        print(f"   • Multi-arrow samples: {np.sum(num_arrows_true >= 2)} ({np.sum(num_arrows_true >= 2)/len(Y_test)*100:.1f}%)")
+        print(f"     - Accuracy: {multi_acc:.1%}")
     
     print(f"\n5. PRACTICAL IMPLICATIONS:")
-    if metrics['average_accuracy'] > 0.65:
-        print(f"   • Model is ready for proof-of-concept deployment")
-        print(f"   • Can assist players by predicting next moves")
-        print(f"   • Could enable automated gameplay analysis")
+    if metrics['exact_match'] > 0.15:
+        print(f"   • Model shows promise for combination prediction")
+        print(f"   • Could assist players with arrow pattern recognition")
+        print(f"   • Ready for proof-of-concept testing")
     else:
-        print(f"   • Current model needs refinement before practical use")
-        print(f"   • Consider: more data, feature engineering, or CNN/LSTM models")
+        print(f"   • Current exact match accuracy is low")
+        print(f"   • May be more useful for per-arrow guidance rather than full combinations")
+        print(f"   • Consider hybrid approach or better features")
     
     print(f"\n6. NEXT STEPS FOR IMPROVEMENT:")
-    print(f"   • Collect more diverse training data (different songs/players)")
     print(f"   • Try CNN/LSTM to capture temporal patterns directly")
+    print(f"   • Collect more diverse training data (different songs/players)")
     print(f"   • Engineer features specific to movement biomechanics")
     print(f"   • Apply data augmentation to increase training samples")
-    print(f"   • Investigate per-player calibration/adaptation")
+    print(f"   • Investigate ensemble methods or confidence thresholding")
     
     print("="*70)
 
