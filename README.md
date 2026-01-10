@@ -56,6 +56,33 @@ python create_dataset.py "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "
 - PNG files: Visualization of sample windows with sensor data and arrow labels
 - Dataset in memory: X (sensor windows) and Y (arrow labels)
 
+### Machine Learning Pipeline
+
+```bash
+python train_model.py <capture1_zip> <sm1_file> <diff1_level> [<capture2_zip> <sm2_file> <diff2_level> ...]
+```
+
+**Example:**
+```bash
+python train_model.py \
+  "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" 5 \
+  "raw_data/Decorator_Medium_6-2026-01-07_06-27-54.zip" "sm_files/DECORATOR.sm" 6 \
+  "raw_data/Charles_5_Medium-2026-01-10_09-22-48.zip" "sm_files/Charles.sm" 5
+```
+
+**Arguments:**
+- Multiple capture sets (each set: `capture_zip sm_file difficulty_level`)
+- Uses same format as dataset tool, but processes multiple captures at once
+
+**Output:**
+- Console: Training progress and evaluation metrics
+- `artifacts/trained_model.pkl`: Trained model saved for later use
+
+**Results (3 captures, 984 samples):**
+- **Average Accuracy: 68.7%** vs Random Baseline: 59.6% (+9.1%)
+- Per-arrow accuracy: Left 67%, Down 72%, Up 70%, Right 66%
+- Model: Random Forest with statistical features (mean, std, min, max, percentiles per channel)
+
 ## Method
 
 The solution uses a **biomechanical model**:
@@ -85,13 +112,22 @@ Creates a labeled dataset from aligned sensor data:
   - Arrow chronogram showing nearby arrow events
   - Highlighted label arrows in the legend
 
+### ML Pipeline Output
+Trains a multi-label classifier to predict arrow presses:
+- **Model**: Random Forest with Binary Relevance (one classifier per arrow)
+- **Features**: Statistical features extracted from sensor windows
+  - Per channel: mean, std, min, max, 25th/75th percentiles (54 features total)
+- **Evaluation**: Per-arrow accuracy, exact match accuracy, Hamming loss
+- **Saved Model**: `artifacts/trained_model.pkl` for inference
+  - Highlighted label arrows in the legend
+
 ## Requirements
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Dependencies: numpy, pandas, scipy, matplotlib
+Dependencies: numpy, pandas, scipy, matplotlib, scikit-learn
 
 ## Project Structure
 
@@ -99,9 +135,10 @@ Dependencies: numpy, pandas, scipy, matplotlib
 DDR-Accelero/
 ├── align_clean.py          # Alignment solution (finds time offset)
 ├── create_dataset.py       # Dataset creation tool (creates labeled samples)
+├── train_model.py          # ML pipeline (trains arrow prediction model)
 ├── raw_data/               # Sensor captures (.zip from Android Sensor Logger)
 ├── sm_files/               # StepMania charts (.sm files)
-└── artifacts/              # Generated plots and visualizations
+└── artifacts/              # Generated plots, visualizations, and trained models
 ```
 
 ## Key Insight
