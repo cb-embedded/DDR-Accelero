@@ -76,14 +76,20 @@ Computes time offset between sensor recording and chart:
 Creates a labeled dataset from aligned sensor data:
 - **X**: Sensor data windows [N × window_length × 9 channels]
   - 9 channels: accelerometer (x,y,z), gyroscope (x,y,z), magnetometer (x,y,z)
-  - Window: centered on arrow event with configurable size (default ±1s)
+  - Window: randomly sampled with configurable size (default ±1s = 2s total)
 - **Y**: Arrow labels [N × 4]
   - 4 arrows: [Left, Down, Up, Right] (binary: 1=pressed, 0=not pressed)
+  - Label is the closest arrow combination to the window center
   - Supports single and double arrow events
+- **Offsets**: Time offsets [N]
+  - Offset in seconds of the label arrow from the window center
+  - Positive = arrow after center, negative = arrow before center
 - **Visualizations**: PNG files showing:
-  - 9 sensor channel plots with red vertical line at label time (t=0)
+  - 9 sensor channel plots with blue vertical line at window center (t=0)
+  - Red vertical line at the label arrow position
   - Arrow chronogram showing nearby arrow events
   - Highlighted label arrows in the legend
+  - Offset information in the title
 
 ## Requirements
 
