@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """
-Train a machine learning model to predict DDR arrow presses from sensor data.
+Train a CNN model to predict DDR arrow presses from sensor data.
 
 This script:
 1. Loads multiple captures and creates a dataset using create_dataset.py functions
 2. Splits data into train/test sets
-3. Trains a classifier to predict arrow labels
-4. Evaluates accuracy and compares to random baseline
+3. Trains a 1D CNN classifier to predict arrow labels from raw sensor time series
+4. Evaluates accuracy using exact combination matching
 """
 
 import sys
 from pathlib import Path
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report, hamming_loss
-from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, hamming_loss
 import pickle
 import matplotlib.pyplot as plt
+
+# PyTorch imports
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
 
 # Import functions from existing scripts
 from create_dataset import load_sensor_data, parse_sm_file, create_dataset
@@ -71,102 +75,221 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
     return X, Y
 
 
-def prepare_features(X):
+class ArrowCNN(nn.Module):
     """
-    Extract features from raw sensor windows.
+    1D CNN for predicting arrow combinations from sensor time series.
     
-    For simplicity, we'll flatten the windows and use basic statistics.
-    More advanced approaches could use CNN features.
-    
-    Args:
-        X: Sensor windows [N x time_steps x 9_channels]
-    
-    Returns:
-        X_features: Feature matrix [N x feature_dim]
+    Architecture:
+    - Input: [batch_size, 9 channels, time_steps]
+    - 3 Conv1D layers with batch norm and max pooling
+    - Fully connected layers
+    - Output: [batch_size, 4] (probabilities for each arrow)
     """
-    N = X.shape[0]
     
-    # Extract statistical features per channel
-    features = []
-    
-    for i in range(N):
-        sample_features = []
+    def __init__(self, input_channels=9, seq_length=198):
+        super(ArrowCNN, self).__init__()
         
-        # For each of 9 channels
-        for ch in range(9):
-            channel_data = X[i, :, ch]
-            
-            # Basic statistics
-            sample_features.extend([
-                np.mean(channel_data),
-                np.std(channel_data),
-                np.min(channel_data),
-                np.max(channel_data),
-                np.percentile(channel_data, 25),
-                np.percentile(channel_data, 75)
-            ])
+        # Convolutional layers
+        self.conv1 = nn.Conv1d(input_channels, 32, kernel_size=7, padding=3)
+        self.bn1 = nn.BatchNorm1d(32)
+        self.pool1 = nn.MaxPool1d(2)
         
-        features.append(sample_features)
+        self.conv2 = nn.Conv1d(32, 64, kernel_size=5, padding=2)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.pool2 = nn.MaxPool1d(2)
+        
+        self.conv3 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm1d(128)
+        self.pool3 = nn.MaxPool1d(2)
+        
+        # Calculate size after convolutions
+        # seq_length -> seq_length/2 -> seq_length/4 -> seq_length/8
+        conv_output_size = (seq_length // 8) * 128
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(conv_output_size, 256)
+        self.dropout1 = nn.Dropout(0.5)
+        self.fc2 = nn.Linear(256, 128)
+        self.dropout2 = nn.Dropout(0.3)
+        self.fc3 = nn.Linear(128, 4)  # 4 arrows
+        
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
     
-    return np.array(features)
+    def forward(self, x):
+        # Conv layers
+        x = self.pool1(self.relu(self.bn1(self.conv1(x))))
+        x = self.pool2(self.relu(self.bn2(self.conv2(x))))
+        x = self.pool3(self.relu(self.bn3(self.conv3(x))))
+        
+        # Flatten
+        x = x.view(x.size(0), -1)
+        
+        # FC layers
+        x = self.relu(self.fc1(x))
+        x = self.dropout1(x)
+        x = self.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = self.sigmoid(self.fc3(x))  # Sigmoid for multi-label
+        
+        return x
 
 
-def train_multilabel_model(X_train, Y_train):
+def train_cnn_model(X_train, Y_train, X_val, Y_val, epochs=50, batch_size=32, lr=0.001):
     """
-    Train a multi-label classifier for arrow prediction.
-    
-    Uses Binary Relevance with Random Forest for each arrow.
+    Train CNN model for arrow prediction.
     
     Args:
-        X_train: Training features
+        X_train: Training data [N x time_steps x 9]
         Y_train: Training labels [N x 4]
+        X_val: Validation data [N x time_steps x 9]
+        Y_val: Validation labels [N x 4]
+        epochs: Number of training epochs
+        batch_size: Batch size
+        lr: Learning rate
     
     Returns:
-        models: List of 4 trained models (one per arrow)
+        model: Trained CNN model
+        history: Training history
     """
-    arrow_names = ['Left', 'Down', 'Up', 'Right']
-    models = []
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"\nUsing device: {device}")
     
-    print("\nTraining models for each arrow...")
-    for i, name in enumerate(arrow_names):
-        print(f"  Training {name} arrow classifier...")
-        
-        # Train binary classifier for this arrow
-        clf = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=20,
-            min_samples_split=5,
-            random_state=42,
-            n_jobs=-1
-        )
-        
-        clf.fit(X_train, Y_train[:, i])
-        models.append(clf)
+    # Reshape X: [N, time_steps, channels] -> [N, channels, time_steps]
+    X_train_t = torch.FloatTensor(X_train).permute(0, 2, 1)
+    Y_train_t = torch.FloatTensor(Y_train)
+    X_val_t = torch.FloatTensor(X_val).permute(0, 2, 1)
+    Y_val_t = torch.FloatTensor(Y_val)
     
-    return models
+    # Create data loaders
+    train_dataset = TensorDataset(X_train_t, Y_train_t)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    val_dataset = TensorDataset(X_val_t, Y_val_t)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    
+    # Initialize model
+    model = ArrowCNN(input_channels=9, seq_length=X_train.shape[1])
+    model = model.to(device)
+    
+    # Loss and optimizer
+    criterion = nn.BCELoss()  # Binary Cross Entropy for multi-label
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    # Training history
+    history = {
+        'train_loss': [],
+        'val_loss': [],
+        'val_exact_match': []
+    }
+    
+    best_exact_match = 0.0
+    best_model_state = None
+    
+    print("\nTraining CNN model...")
+    for epoch in range(epochs):
+        # Training
+        model.train()
+        train_loss = 0.0
+        
+        for batch_X, batch_Y in train_loader:
+            batch_X, batch_Y = batch_X.to(device), batch_Y.to(device)
+            
+            optimizer.zero_grad()
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_Y)
+            loss.backward()
+            optimizer.step()
+            
+            train_loss += loss.item() * batch_X.size(0)
+        
+        train_loss /= len(train_loader.dataset)
+        
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for batch_X, batch_Y in val_loader:
+                batch_X, batch_Y = batch_X.to(device), batch_Y.to(device)
+                outputs = model(batch_X)
+                loss = criterion(outputs, batch_Y)
+                val_loss += loss.item() * batch_X.size(0)
+                
+                # Convert probabilities to binary predictions
+                preds = (outputs > 0.5).float().cpu().numpy()
+                all_preds.append(preds)
+                all_labels.append(batch_Y.cpu().numpy())
+        
+        val_loss /= len(val_loader.dataset)
+        
+        # Calculate exact match accuracy
+        all_preds = np.vstack(all_preds)
+        all_labels = np.vstack(all_labels)
+        exact_match = np.mean(np.all(all_preds == all_labels, axis=1))
+        
+        # Save history
+        history['train_loss'].append(train_loss)
+        history['val_loss'].append(val_loss)
+        history['val_exact_match'].append(exact_match)
+        
+        # Save best model
+        if exact_match > best_exact_match:
+            best_exact_match = exact_match
+            best_model_state = model.state_dict().copy()
+        
+        # Print progress every 5 epochs
+        if (epoch + 1) % 5 == 0 or epoch == 0:
+            print(f"Epoch [{epoch+1}/{epochs}] - "
+                  f"Train Loss: {train_loss:.4f}, "
+                  f"Val Loss: {val_loss:.4f}, "
+                  f"Val Exact Match: {exact_match:.1%}")
+    
+    # Load best model
+    model.load_state_dict(best_model_state)
+    print(f"\nBest validation exact match: {best_exact_match:.1%}")
+    
+    return model, history
 
 
-def evaluate_model(models, X_test, Y_test):
+def evaluate_cnn_model(model, X_test, Y_test, batch_size=32):
     """
-    Evaluate multi-label model performance.
+    Evaluate CNN model on test set.
     
     Args:
-        models: List of trained models
-        X_test: Test features
-        Y_test: Test labels
+        model: Trained CNN model
+        X_test: Test data [N x time_steps x 9]
+        Y_test: Test labels [N x 4]
+        batch_size: Batch size for evaluation
     
     Returns:
         metrics: Dictionary with evaluation metrics
     """
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    model.eval()
+    
+    # Reshape X: [N, time_steps, channels] -> [N, channels, time_steps]
+    X_test_t = torch.FloatTensor(X_test).permute(0, 2, 1)
+    Y_test_t = torch.FloatTensor(Y_test)
+    
+    test_dataset = TensorDataset(X_test_t, Y_test_t)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    
+    all_preds = []
+    
+    with torch.no_grad():
+        for batch_X, _ in test_loader:
+            batch_X = batch_X.to(device)
+            outputs = model(batch_X)
+            preds = (outputs > 0.5).float().cpu().numpy()
+            all_preds.append(preds)
+    
+    Y_pred = np.vstack(all_preds)
+    
     arrow_names = ['Left', 'Down', 'Up', 'Right']
-    
-    # Predict each arrow
-    Y_pred = np.zeros_like(Y_test)
-    
-    for i, model in enumerate(models):
-        Y_pred[:, i] = model.predict(X_test)
-    
-    # Compute metrics
     
     # Exact match accuracy (all 4 arrows must match)
     exact_match = np.mean(np.all(Y_pred == Y_test, axis=1))
@@ -194,6 +317,7 @@ def evaluate_model(models, X_test, Y_test):
     }
     
     return metrics
+
 
 
 def print_results(metrics, Y_train):
@@ -407,27 +531,23 @@ def print_results(metrics, Y_train):
     print("="*70)
 
 
-def save_model(models, scaler, filepath='trained_model.pkl'):
-    """Save trained models and scaler."""
-    model_data = {
-        'models': models,
-        'scaler': scaler,
+def save_model(model, filepath='trained_model.pth'):
+    """Save trained CNN model."""
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'model_class': 'ArrowCNN',
         'arrow_names': ['Left', 'Down', 'Up', 'Right']
-    }
-    
-    with open(filepath, 'wb') as f:
-        pickle.dump(model_data, f)
+    }, filepath)
     
     print(f"\nModel saved to: {filepath}")
 
 
-def visualize_predictions(X_raw, X_features, Y_test, Y_pred, indices, output_dir='artifacts'):
+def visualize_predictions(X_raw, Y_test, Y_pred, indices, output_dir='artifacts'):
     """
     Visualize sample predictions with input sensor data.
     
     Args:
         X_raw: Raw sensor data windows [N x time_steps x 9]
-        X_features: Feature matrix [N x 54]
         Y_test: True labels [N x 4]
         Y_pred: Predicted labels [N x 4]
         indices: List of sample indices to visualize
@@ -545,7 +665,7 @@ def main():
         capture_configs.append((args[i], args[i+1], int(args[i+2])))
     
     print("="*70)
-    print("DDR MACHINE LEARNING PIPELINE")
+    print("DDR MACHINE LEARNING PIPELINE - CNN")
     print("="*70)
     print(f"\nCaptures to process: {len(capture_configs)}")
     
@@ -559,67 +679,85 @@ def main():
     print(f"X shape: {X.shape} (samples x time_steps x channels)")
     print(f"Y shape: {Y.shape} (samples x arrows)")
     
-    # Prepare features
+    # Split into train/val/test (60/20/20)
     print("\n" + "="*70)
-    print("STEP 2: FEATURE EXTRACTION")
-    print("="*70)
-    print("Extracting statistical features from raw sensor windows...")
-    X_features = prepare_features(X)
-    print(f"Feature matrix shape: {X_features.shape}")
-    
-    # Split into train/test
-    print("\n" + "="*70)
-    print("STEP 3: TRAIN/TEST SPLIT")
+    print("STEP 2: TRAIN/VAL/TEST SPLIT")
     print("="*70)
     
-    # Split both features and raw data to keep them aligned
-    X_train_feat, X_test_feat, Y_train, Y_test, X_train_raw, X_test_raw = train_test_split(
-        X_features, Y, X, test_size=0.2, random_state=42, stratify=None
+    # First split: 80% train+val, 20% test
+    X_trainval, X_test, Y_trainval, Y_test = train_test_split(
+        X, Y, test_size=0.2, random_state=42, stratify=None
     )
-    print(f"Training samples: {len(X_train_feat)}")
-    print(f"Test samples: {len(X_test_feat)}")
     
-    # Normalize features
-    print("\nNormalizing features...")
-    scaler = StandardScaler()
-    X_train_norm = scaler.fit_transform(X_train_feat)
-    X_test_norm = scaler.transform(X_test_feat)
+    # Second split: 75% train, 25% val (of the 80%)
+    X_train, X_val, Y_train, Y_val = train_test_split(
+        X_trainval, Y_trainval, test_size=0.25, random_state=42, stratify=None
+    )
     
-    # Train model
+    print(f"Training samples: {len(X_train)}")
+    print(f"Validation samples: {len(X_val)}")
+    print(f"Test samples: {len(X_test)}")
+    
+    # Train CNN model
     print("\n" + "="*70)
-    print("STEP 4: TRAINING MODEL")
+    print("STEP 3: TRAINING CNN MODEL")
     print("="*70)
-    models = train_multilabel_model(X_train_norm, Y_train)
+    model, history = train_cnn_model(X_train, Y_train, X_val, Y_val, 
+                                     epochs=50, batch_size=32, lr=0.001)
     
-    # Evaluate
+    # Plot training history
+    print("\nPlotting training history...")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4))
+    
+    ax1.plot(history['train_loss'], label='Train Loss')
+    ax1.plot(history['val_loss'], label='Val Loss')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.set_title('Training and Validation Loss')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    ax2.plot(history['val_exact_match'])
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Exact Match Accuracy')
+    ax2.set_title('Validation Exact Match Accuracy')
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('artifacts/training_history.png', dpi=150, bbox_inches='tight')
+    print("  Saved: artifacts/training_history.png")
+    plt.close()
+    
+    # Evaluate on test set
     print("\n" + "="*70)
-    print("STEP 5: EVALUATION")
+    print("STEP 4: EVALUATION ON TEST SET")
     print("="*70)
-    metrics = evaluate_model(models, X_test_norm, Y_test)
+    metrics = evaluate_cnn_model(model, X_test, Y_test)
     print_results(metrics, Y_train)
     
     # Save model
-    save_model(models, scaler, filepath='artifacts/trained_model.pkl')
+    save_model(model, filepath='artifacts/trained_model.pth')
     
     # Generate sample prediction visualizations
     print("\n" + "="*70)
-    print("STEP 6: GENERATING SAMPLE PREDICTION VISUALIZATIONS")
+    print("STEP 5: GENERATING SAMPLE PREDICTION VISUALIZATIONS")
     print("="*70)
     
     # Select 10 random samples from test set
-    num_viz = min(10, len(X_test_raw))
+    num_viz = min(10, len(X_test))
     print(f"\nGenerating {num_viz} random sample visualizations...")
     
     np.random.seed(42)
-    viz_indices = np.random.choice(len(X_test_raw), size=num_viz, replace=False)
+    viz_indices = np.random.choice(len(X_test), size=num_viz, replace=False)
     
-    visualize_predictions(X_test_raw, X_test_feat, Y_test, metrics['Y_pred'], 
+    visualize_predictions(X_test, Y_test, metrics['Y_pred'], 
                          viz_indices, output_dir='artifacts')
     
     print("\n" + "="*70)
     print("TRAINING COMPLETE")
     print("="*70)
-    print(f"\n✓ Model saved to: artifacts/trained_model.pkl")
+    print(f"\n✓ Model saved to: artifacts/trained_model.pth")
+    print(f"✓ Training history saved to: artifacts/training_history.png")
     print(f"✓ Sample predictions saved to: artifacts/prediction_sample_*.png")
     print("="*70)
 

@@ -25,5 +25,7 @@ Thumbs.db
 
 # ML artifacts
 artifacts/*.pkl
+artifacts/*.pth
 artifacts/prediction_sample_*.png
 artifacts/dataset_sample_*.png
+artifacts/training_history.png
