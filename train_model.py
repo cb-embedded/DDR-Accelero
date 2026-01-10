@@ -17,10 +17,12 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, hamming_loss
 from sklearn.preprocessing import StandardScaler
 import pickle
+import matplotlib.pyplot as plt
 
 # Import functions from existing scripts
 from create_dataset import load_sensor_data, parse_sm_file, create_dataset
 from align_clean import align_capture
+
 
 
 def load_datasets_from_captures(capture_configs, window_size=1.0):
@@ -214,6 +216,24 @@ def print_results(metrics, Y_train):
     
     random_baseline = np.mean(random_per_arrow)
     
+    # CLEARER BASELINE EXPLANATION
+    print("\n" + "-"*70)
+    print("RANDOM BASELINE EXPLANATION (for non-experts)")
+    print("-"*70)
+    print("\nThis is NOT a simple 1/4 (25%) chance problem!")
+    print("\nWhy? Because:")
+    print("  • Each sample can have MULTIPLE arrows pressed simultaneously")
+    print("  • We predict 4 INDEPENDENT yes/no decisions (Left, Down, Up, Right)")
+    print("  • Example: a sample could be [Left+Up] = [1,0,1,0]")
+    print("\nRandom baseline calculation:")
+    print(f"  • If we guess randomly based on training data frequencies:")
+    for i, name in enumerate(metrics['arrow_names']):
+        prob = label_dist[i]
+        print(f"    - {name}: appears {prob:.1%} of the time → random accuracy = {random_per_arrow[i]:.1%}")
+    print(f"  • Average random accuracy: {random_baseline:.1%}")
+    print("\nSo random guessing gives ~59-60%, NOT 25%!")
+    print("-"*70)
+    
     print(f"\nBaseline (Random with training distribution): {random_baseline:.4f}")
     print(f"Model Average Accuracy: {metrics['average_accuracy']:.4f}")
     print(f"Improvement over baseline: {(metrics['average_accuracy'] - random_baseline):.4f}")
@@ -240,6 +260,42 @@ def print_results(metrics, Y_train):
         count = np.sum(metrics['Y_test'][:, i])
         total = len(metrics['Y_test'])
         print(f"  {name:5s}: {count}/{total} ({count/total*100:.1f}%)")
+    
+    # ANALYSIS OF DOUBLE/MULTIPLE PRESSES
+    print("\n" + "-"*70)
+    print("DOUBLE/MULTIPLE ARROW ANALYSIS")
+    print("-"*70)
+    
+    # Count samples by number of arrows
+    Y_test = metrics['Y_test']
+    Y_pred = metrics['Y_pred']
+    
+    num_arrows_true = np.sum(Y_test, axis=1)
+    num_arrows_pred = np.sum(Y_pred, axis=1)
+    
+    print("\nDistribution of samples by number of simultaneous arrows:")
+    for n in range(5):
+        count = np.sum(num_arrows_true == n)
+        if count > 0:
+            pct = count / len(Y_test) * 100
+            print(f"  {n} arrows: {count} samples ({pct:.1f}%)")
+    
+    # Accuracy for single vs double/multiple
+    single_mask = num_arrows_true == 1
+    double_plus_mask = num_arrows_true >= 2
+    
+    if np.sum(single_mask) > 0:
+        single_acc = np.mean(np.all(Y_pred[single_mask] == Y_test[single_mask], axis=1))
+        print(f"\nAccuracy on SINGLE arrow presses: {single_acc:.1%}")
+    
+    if np.sum(double_plus_mask) > 0:
+        double_acc = np.mean(np.all(Y_pred[double_plus_mask] == Y_test[double_plus_mask], axis=1))
+        print(f"Accuracy on DOUBLE+ arrow presses: {double_acc:.1%}")
+        
+        if np.sum(single_mask) > 0:
+            print(f"\n→ Double presses are {'HARDER' if double_acc < single_acc else 'EASIER'} to predict")
+    
+    print("-"*70)
     
     # Add interpretation of results
     print("\n" + "="*70)
@@ -318,6 +374,109 @@ def save_model(models, scaler, filepath='trained_model.pkl'):
     print(f"\nModel saved to: {filepath}")
 
 
+def visualize_predictions(X_raw, X_features, Y_test, Y_pred, indices, output_dir='artifacts'):
+    """
+    Visualize sample predictions with input sensor data.
+    
+    Args:
+        X_raw: Raw sensor data windows [N x time_steps x 9]
+        X_features: Feature matrix [N x 54]
+        Y_test: True labels [N x 4]
+        Y_pred: Predicted labels [N x 4]
+        indices: List of sample indices to visualize
+        output_dir: Directory to save visualizations
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True)
+    
+    arrow_names = ['Left', 'Down', 'Up', 'Right']
+    channel_names = ['Accel X', 'Accel Y', 'Accel Z',
+                     'Gyro X', 'Gyro Y', 'Gyro Z',
+                     'Mag X', 'Mag Y', 'Mag Z']
+    
+    dt = 0.01  # 100 Hz sampling
+    
+    for sample_idx, idx in enumerate(indices):
+        fig = plt.figure(figsize=(16, 12))
+        
+        # Create grid
+        gs = fig.add_gridspec(5, 2, hspace=0.4, wspace=0.3, height_ratios=[1, 1, 1, 1, 0.8])
+        
+        # Get data
+        sensor_window = X_raw[idx]  # [time_steps x 9]
+        y_true = Y_test[idx]
+        y_pred = Y_pred[idx]
+        
+        # Create time axis (centered at 0)
+        n_samples = sensor_window.shape[0]
+        t = np.arange(n_samples) * dt - (n_samples * dt / 2)
+        
+        # Plot 9 sensor channels
+        for i in range(9):
+            row = i // 2
+            col = i % 2
+            ax = fig.add_subplot(gs[row, col])
+            ax.plot(t, sensor_window[:, i], linewidth=0.8, color='#1f77b4')
+            ax.set_title(channel_names[i], fontsize=10, fontweight='bold')
+            ax.set_xlabel('Time (s)', fontsize=8)
+            ax.grid(True, alpha=0.3)
+            ax.axvline(0, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
+        
+        # Add prediction comparison panel
+        ax_pred = fig.add_subplot(gs[4, :])
+        ax_pred.axis('off')
+        
+        # Format labels
+        true_arrows = [arrow_names[i] for i, v in enumerate(y_true) if v == 1]
+        pred_arrows = [arrow_names[i] for i, v in enumerate(y_pred) if v == 1]
+        
+        true_str = ' + '.join(true_arrows) if true_arrows else 'None'
+        pred_str = ' + '.join(pred_arrows) if pred_arrows else 'None'
+        
+        # Check if prediction is correct
+        is_correct = np.all(y_true == y_pred)
+        result_color = 'green' if is_correct else 'red'
+        result_text = '✓ CORRECT' if is_correct else '✗ WRONG'
+        
+        # Create comparison table
+        comparison_text = f"""
+PREDICTION RESULT: {result_text}
+
+╔═══════════════════════════════════════════════════════════════╗
+║  Arrow    │  True Label  │  Predicted   │  Match?            ║
+╠═══════════════════════════════════════════════════════════════╣
+"""
+        
+        for i, name in enumerate(arrow_names):
+            true_val = '✓ YES' if y_true[i] == 1 else '✗ NO'
+            pred_val = '✓ YES' if y_pred[i] == 1 else '✗ NO'
+            match = '✓' if y_true[i] == y_pred[i] else '✗'
+            comparison_text += f"║  {name:7s} │  {true_val:11s} │  {pred_val:11s} │  {match:17s} ║\n"
+        
+        comparison_text += "╚═══════════════════════════════════════════════════════════════╝\n"
+        comparison_text += f"\nCombined Labels:\n"
+        comparison_text += f"  • TRUE:      {true_str}\n"
+        comparison_text += f"  • PREDICTED: {pred_str}"
+        
+        ax_pred.text(0.5, 0.5, comparison_text,
+                    transform=ax_pred.transAxes,
+                    fontsize=11,
+                    family='monospace',
+                    verticalalignment='center',
+                    horizontalalignment='center',
+                    bbox=dict(boxstyle='round', facecolor='wheat' if is_correct else 'lightcoral', alpha=0.3))
+        
+        # Title
+        fig.suptitle(f'Sample Prediction #{sample_idx + 1} (Test Index: {idx}) - {result_text}',
+                    fontsize=14, fontweight='bold', color=result_color)
+        
+        # Save
+        output_path = output_dir / f'prediction_sample_{sample_idx + 1:02d}.png'
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"  Saved: {output_path}")
+        plt.close()
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -365,36 +524,56 @@ def main():
     print("\n" + "="*70)
     print("STEP 3: TRAIN/TEST SPLIT")
     print("="*70)
-    X_train, X_test, Y_train, Y_test = train_test_split(
-        X_features, Y, test_size=0.2, random_state=42, stratify=None
+    
+    # Split both features and raw data to keep them aligned
+    X_train_feat, X_test_feat, Y_train, Y_test, X_train_raw, X_test_raw = train_test_split(
+        X_features, Y, X, test_size=0.2, random_state=42, stratify=None
     )
-    print(f"Training samples: {len(X_train)}")
-    print(f"Test samples: {len(X_test)}")
+    print(f"Training samples: {len(X_train_feat)}")
+    print(f"Test samples: {len(X_test_feat)}")
     
     # Normalize features
     print("\nNormalizing features...")
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    X_train_norm = scaler.fit_transform(X_train_feat)
+    X_test_norm = scaler.transform(X_test_feat)
     
     # Train model
     print("\n" + "="*70)
     print("STEP 4: TRAINING MODEL")
     print("="*70)
-    models = train_multilabel_model(X_train, Y_train)
+    models = train_multilabel_model(X_train_norm, Y_train)
     
     # Evaluate
     print("\n" + "="*70)
     print("STEP 5: EVALUATION")
     print("="*70)
-    metrics = evaluate_model(models, X_test, Y_test)
+    metrics = evaluate_model(models, X_test_norm, Y_test)
     print_results(metrics, Y_train)
     
     # Save model
     save_model(models, scaler, filepath='artifacts/trained_model.pkl')
     
+    # Generate sample prediction visualizations
+    print("\n" + "="*70)
+    print("STEP 6: GENERATING SAMPLE PREDICTION VISUALIZATIONS")
+    print("="*70)
+    
+    # Select 10 random samples from test set
+    num_viz = min(10, len(X_test_raw))
+    print(f"\nGenerating {num_viz} random sample visualizations...")
+    
+    np.random.seed(42)
+    viz_indices = np.random.choice(len(X_test_raw), size=num_viz, replace=False)
+    
+    visualize_predictions(X_test_raw, X_test_feat, Y_test, metrics['Y_pred'], 
+                         viz_indices, output_dir='artifacts')
+    
     print("\n" + "="*70)
     print("TRAINING COMPLETE")
+    print("="*70)
+    print(f"\n✓ Model saved to: artifacts/trained_model.pkl")
+    print(f"✓ Sample predictions saved to: artifacts/prediction_sample_*.png")
     print("="*70)
 
 
