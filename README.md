@@ -62,8 +62,7 @@ DDR-Accelero/
 ├── align_clean.py          # Working alignment solution
 ├── raw_data/               # Sensor captures (.zip from Android Sensor Logger)
 ├── sm_files/               # StepMania charts (.sm files)
-├── artifacts/              # Generated correlation plots (2 examples)
-└── experiments/            # Original experiment scripts (reference)
+└── artifacts/              # Generated correlation plots (2 examples)
 ```
 
 ## Key Insight
