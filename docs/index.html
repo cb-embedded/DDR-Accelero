@@ -11,36 +11,25 @@
 <body>
     <div class="container">
         <header>
-            <h1>🎮 DDR Accelero - Web Inference</h1>
+            <h1>DDR Accelero - Web Inference</h1>
             <p class="subtitle">Machine Learning-based Dance Dance Revolution Arrow Prediction</p>
         </header>
 
-        <div class="instructions">
-            <h2>📋 Instructions</h2>
-            <ol>
-                <li><strong>Upload Sensor Capture:</strong> Select a .zip file containing sensor data (Gravity.csv, Gyroscope.csv, Magnetometer.csv)</li>
-                <li><strong>Upload Chart File:</strong> Select the corresponding .sm (StepMania) file for comparison</li>
-                <li><strong>Select Difficulty:</strong> Choose the difficulty level to analyze</li>
-                <li><strong>Run Inference:</strong> Click "Predict Arrows" to generate predictions</li>
-                <li><strong>View Results:</strong> Scroll through the visualization to compare predictions vs ground truth</li>
-            </ol>
-        </div>
-
         <div class="upload-section">
             <div class="upload-group">
-                <h3>1️⃣ Sensor Capture</h3>
+                <h3>Sensor Capture</h3>
                 <input type="file" id="zipFile" accept=".zip" />
                 <div id="zipStatus" class="status"></div>
             </div>
 
             <div class="upload-group">
-                <h3>2️⃣ Chart File (.sm)</h3>
+                <h3>Chart File (.sm)</h3>
                 <input type="file" id="smFile" accept=".sm" />
                 <div id="smStatus" class="status"></div>
             </div>
 
             <div class="upload-group">
-                <h3>3️⃣ Difficulty Level</h3>
+                <h3>Difficulty Level</h3>
                 <select id="difficulty">
                     <option value="5">5 (Easy/Medium)</option>
                     <option value="6">6 (Medium)</option>
@@ -52,14 +41,14 @@
             </div>
 
             <div class="upload-group">
-                <h3>4️⃣ Run Inference</h3>
+                <h3>Run Inference</h3>
                 <button id="predictButton" disabled>Predict Arrows</button>
                 <div id="progress" class="status"></div>
             </div>
         </div>
 
         <div id="results" class="results-section" style="display: none;">
-            <h2>📊 Results</h2>
+            <h2>Results</h2>
             <div id="stats" class="stats"></div>
             <div class="visualization-container">
                 <div id="visualization" class="visualization"></div>
@@ -68,8 +57,7 @@
 
         <footer>
             <p>
-                <a href="https://github.com/cb-embedded/DDR-Accelero" target="_blank">GitHub Repository</a> | 
-                Built with ❤️ for DDR enthusiasts
+                <a href="https://github.com/cb-embedded/DDR-Accelero" target="_blank">GitHub Repository</a>
             </p>
         </footer>
     </div>
