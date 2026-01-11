@@ -1,23 +1,28 @@
 # DDR-Accelero
 
-Alignment tool for Dance Dance Revolution (DDR) accelerometer data with StepMania chart files.
+Machine Learning-powered Dance Dance Revolution (DDR) arrow prediction from accelerometer data.
 
-## 🌐 Web Application
+## 🌐 Web Application (NEW!)
 
-**Try it online:** [https://cb-embedded.github.io/DDR-Accelero/](https://cb-embedded.github.io/DDR-Accelero/)
+**✨ Try it online:** [https://cb-embedded.github.io/DDR-Accelero/](https://cb-embedded.github.io/DDR-Accelero/)
 
-The web application allows you to:
-- Upload sensor capture ZIP files (from Android Sensor Logger)
-- Upload StepMania (.sm) chart files
-- Run ML inference in your browser to predict arrow patterns
-- Visualize predictions vs ground truth side-by-side
-- Compare results with interactive scrollable visualization
+Experience the power of ML-based arrow prediction directly in your browser:
 
-No installation required - everything runs directly in your browser!
+- 📤 **Upload** sensor capture ZIP files (from Android Sensor Logger)
+- 📤 **Upload** StepMania (.sm) chart files for comparison
+- 🤖 **Run** ML inference entirely in your browser (no server needed!)
+- 📊 **Visualize** predictions vs ground truth side-by-side
+- 🎮 **Compare** results with interactive scrollable StepMania-style visualization
+
+**No installation required** - everything runs client-side in your browser!
+
+👉 [Get Started Guide](docs/GETTING_STARTED.md) | [Web App Documentation](docs/README.md)
+
+---
 
 ## Current Status
 
-**Working solution implemented** using biomechanical approach with clear correlation peaks.
+**Working solution implemented** using both biomechanical approach and ML-based prediction.
 
 ### Results
 
@@ -282,3 +287,26 @@ See `RESULTS.md` for comprehensive performance analysis:
 - Arrow prediction: 19.3% exact match (beats 17.0% random baseline)
 - Offset prediction: 186ms MAE, 87.7% within 250ms
 - Assessment: GOOD performance for real-world gameplay assistance
+
+## Web Export Tool
+
+Convert trained PyTorch models to ONNX format for web inference:
+
+```bash
+python export_model_to_onnx.py --model-path artifacts/trained_model.pth --output docs/model.onnx
+```
+
+**Arguments:**
+- `--model-path`: Path to trained PyTorch model (default: `artifacts/trained_model.pth`)
+- `--output`: Path to save ONNX model (default: `docs/model.onnx`)
+- `--seq-length`: Expected sequence length (default: 198)
+
+**Output:**
+- ONNX model file compatible with ONNX Runtime Web
+- Model can be loaded directly in browsers for client-side inference
+- No server required for predictions!
+
+**Usage in Web App:**
+Once exported, the ONNX model can be integrated into the web application (docs/inference.js) to replace the demo algorithm with actual ML predictions.
+
+See [docs/README.md](docs/README.md) for web integration details.

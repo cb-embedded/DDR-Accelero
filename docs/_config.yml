@@ -1,0 +1,11 @@
+# GitHub Pages Configuration
+# This file is used by GitHub Pages to configure the site
+
+# Theme (optional, not needed for custom HTML)
+# theme: jekyll-theme-cayman
+
+# Exclude files from being published
+exclude:
+  - README.md
+  - test.html
+  - .gitignore
