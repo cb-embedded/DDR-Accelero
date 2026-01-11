@@ -4,6 +4,11 @@ Example: Using visualize_arrows with ML model predictions.
 
 This script demonstrates how to integrate the arrow visualization module
 with machine learning predictions for DDR arrow detection.
+
+NOTE: The predictions in this example are SIMULATED (not from a real trained model).
+They demonstrate realistic error patterns (timing errors, misses, false positives)
+that might occur in real ML predictions. This serves as a template for visualizing
+actual model predictions when a trained model is available.
 """
 
 import sys
