@@ -32,3 +32,4 @@ artifacts/training_history.png
 
 # ONNX models (too large for git)
 docs/*.onnx
+docs/*.onnx.data
