@@ -30,6 +30,6 @@ artifacts/prediction_sample_*.png
 artifacts/dataset_sample_*.png
 artifacts/training_history.png
 
-# ONNX models (too large for git)
-docs/*.onnx
-docs/*.onnx.data
+# Test scripts
+test_onnx_model.py
+test_onnx_real_data.py
