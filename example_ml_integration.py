@@ -12,7 +12,7 @@ from visualize_arrows import extract_sm_window, visualize_arrows
 import numpy as np
 
 
-def simulate_ml_predictions(ground_truth_events, timing_error_std=0.1, miss_rate=0.1):
+def simulate_ml_predictions(ground_truth_events, timing_error_std=0.1, miss_rate=0.1, random_seed=42):
     """
     Simulate ML model predictions with realistic errors.
     
@@ -20,11 +20,12 @@ def simulate_ml_predictions(ground_truth_events, timing_error_std=0.1, miss_rate
         ground_truth_events: List of ground truth events
         timing_error_std: Standard deviation of timing errors (in seconds)
         miss_rate: Probability of missing an arrow (0.0 to 1.0)
+        random_seed: Random seed for reproducibility (default: 42)
     
     Returns:
         List of predicted events (same format as input)
     """
-    np.random.seed(42)
+    np.random.seed(random_seed)
     predictions = []
     
     for event in ground_truth_events:

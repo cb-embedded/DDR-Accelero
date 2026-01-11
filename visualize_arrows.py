@@ -36,7 +36,10 @@ def extract_sm_window(sm_path, diff_level, diff_type='medium', start_time=None, 
         text = f.read()
     
     # Extract BPM (use first BPM value if multiple)
-    bpm_line = [l for l in text.splitlines() if l.startswith("#BPMS:")][0]
+    bpm_lines = [l for l in text.splitlines() if l.startswith("#BPMS:")]
+    if not bpm_lines:
+        raise ValueError(f"No BPM information found in {sm_path}")
+    bpm_line = bpm_lines[0]
     bpm_str = bpm_line.split(":")[1].split(";")[0].split("=")[1].split(",")[0]
     bpm = float(bpm_str)
     sec_per_beat = 60.0 / bpm
