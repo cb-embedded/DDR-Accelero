@@ -82,6 +82,46 @@ python train_model.py \
 
 **Note**: The model predicts **BOTH arrow labels AND offsets** using multi-task learning. See `RESULTS.md` for comprehensive evaluation and visualizations.
 
+### Arrow Visualization Tool
+
+```bash
+python visualize_arrows.py
+```
+
+Creates StepMania-style arrow pattern visualizations for comparing two sets of arrows side-by-side.
+
+**Example:**
+```bash
+# Run demo (compares Lucky Orb and Seyana)
+python visualize_arrows.py
+
+# Use in Python
+from visualize_arrows import extract_sm_window, visualize_arrows
+
+# Extract arrows from .sm file
+events = extract_sm_window('sm_files/Lucky Orb.sm', 5, 'medium', 
+                            start_time=70.0, duration=10.0)
+
+# Visualize comparison
+visualize_arrows(ground_truth, predictions, 
+                 output_path='comparison.png',
+                 title1='Original', title2='Predictions')
+```
+
+**Output:**
+- PNG files with dual-column arrow pattern comparison
+- Left column: Player 1 arrows (e.g., original chart)
+- Right column: Player 2 arrows (e.g., ML predictions)
+- StepMania-style vertical scrolling visualization
+
+**Use Cases:**
+- Compare original charts with ML predictions
+- Visualize different difficulty levels side-by-side
+- Analyze arrow patterns across songs
+- Document model performance visually
+
+See `ARROW_VISUALIZATION_README.md` for detailed documentation and `example_ml_integration.py` for integration examples.
+
 ## Method
 
 The solution uses a **biomechanical model**:
@@ -168,6 +208,8 @@ DDR-Accelero/
 ├── align_clean.py          # Alignment solution (finds time offset)
 ├── create_dataset.py       # Dataset creation tool (creates labeled samples)
 ├── train_model.py          # ML pipeline (trains arrow prediction model)
+├── visualize_arrows.py     # Arrow visualization tool (StepMania-style charts)
+├── example_ml_integration.py  # Example: visualizing ML predictions
 ├── raw_data/               # Sensor captures (.zip from Android Sensor Logger)
 ├── sm_files/               # StepMania charts (.sm files)
 └── artifacts/              # Generated plots, visualizations, and trained models
