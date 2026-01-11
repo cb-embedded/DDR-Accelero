@@ -35,8 +35,7 @@ def load_trained_model(model_path='artifacts/trained_model.pth'):
 
 
 def make_predictions_on_song(model, capture_path, sm_path, diff_level, 
-                              start_time, duration, window_size=1.0,
-                              offset_threshold=0.25):
+                              start_time, duration, window_size=1.0):
     """
     Make predictions on a specific time window of a song.
     
@@ -48,7 +47,6 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
         start_time: Start time in seconds for prediction window
         duration: Duration of prediction window in seconds
         window_size: Size of sliding window for predictions (default 1.0s)
-        offset_threshold: Only include predictions with absolute offset below this value
         
     Returns:
         list of dicts: Predictions in format [{'time': t, 'arrows': [L,D,U,R]}, ...]
@@ -76,7 +74,6 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
     sensor_end = sensor_start + duration
     
     print(f"[4/4] Making predictions on {duration}s window (chart time {start_time:.1f}s to {start_time+duration:.1f}s)...")
-    print(f"  Offset threshold: {offset_threshold:.3f}s (filtering to avoid duplicates)")
     
     # Match the model's expected input size
     expected_timesteps = 198
@@ -120,10 +117,6 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
             pred_arrows = (arrows_out[0] > 0.5).float().cpu().numpy().astype(int)
             pred_offset = offset_out[0, 0].cpu().numpy()
             
-            # Filter by offset threshold to avoid duplicates
-            if abs(pred_offset) > offset_threshold:
-                continue
-            
             # Only add prediction if at least one arrow is predicted
             if pred_arrows.sum() > 0:
                 # Convert sensor time back to chart time
@@ -139,35 +132,20 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
                         'offset': pred_offset
                     })
     
-    # Deduplicate predictions that are too close in time
-    # Sort by time and remove duplicates within 0.3s window
-    if predictions:
-        predictions.sort(key=lambda x: x['time'])
-        deduplicated = [predictions[0]]
-        for pred in predictions[1:]:
-            # Check if this prediction is too close to the last one
-            if pred['time'] - deduplicated[-1]['time'] > 0.3:
-                deduplicated.append(pred)
-            # If close in time, keep the one with smaller absolute offset
-            elif abs(pred['offset']) < abs(deduplicated[-1]['offset']):
-                deduplicated[-1] = pred
-        predictions = deduplicated
-    
-    print(f"  Generated {len(predictions)} predictions (after filtering and deduplication)")
+    print(f"  Generated {len(predictions)} predictions")
     return predictions
 
 
 def main():
     if len(sys.argv) < 4:
-        print("\nUsage: python predict_song.py <capture_zip> <sm_file> <diff_level> [start_time] [duration] [offset_threshold]")
+        print("\nUsage: python predict_song.py <capture_zip> <sm_file> <diff_level> [start_time] [duration]")
         print("\nExample:")
         print("  python predict_song.py \\")
-        print("    'raw_data/Charles_5_Medium-2026-01-10_09-22-48.zip' \\")
-        print("    'sm_files/Charles.sm' \\")
-        print("    5 \\")
+        print("    'raw_data/Butterfly_Cat_6_Medium-2026-01-10_09-34-07.zip' \\")
+        print("    'sm_files/Butterfly Cat.sm' \\")
+        print("    6 \\")
         print("    70.0 \\")
-        print("    10.0 \\")
-        print("    0.25")
+        print("    10.0")
         sys.exit(1)
     
     capture_path = sys.argv[1]
@@ -175,7 +153,6 @@ def main():
     diff_level = int(sys.argv[3])
     start_time = float(sys.argv[4]) if len(sys.argv) > 4 else 70.0
     duration = float(sys.argv[5]) if len(sys.argv) > 5 else 10.0
-    offset_threshold = float(sys.argv[6]) if len(sys.argv) > 6 else 0.25
     
     print("="*70)
     print("PREDICT ARROWS FOR HOLD-OUT SONG")
@@ -184,7 +161,6 @@ def main():
     print(f"SM File: {Path(sm_path).name}")
     print(f"Difficulty: {diff_level}")
     print(f"Time window: {start_time}s to {start_time + duration}s")
-    print(f"Offset threshold: {offset_threshold}s")
     
     # Step 1: Load trained model
     print("\n" + "="*70)
@@ -199,7 +175,7 @@ def main():
     
     predictions = make_predictions_on_song(
         model, capture_path, sm_path, diff_level,
-        start_time, duration, offset_threshold=offset_threshold
+        start_time, duration
     )
     
     # Step 3: Extract ground truth
@@ -231,7 +207,7 @@ def main():
         duration=duration,
         output_path=output_path,
         title1=f'Original Chart ({Path(sm_path).stem} Medium {diff_level})',
-        title2=f'ML Predictions (offset≤{offset_threshold:.2f}s)'
+        title2=f'ML Predictions'
     )
     
     # Print summary
@@ -239,8 +215,9 @@ def main():
     print("PREDICTION COMPARISON COMPLETE")
     print("="*70)
     print(f"\n✓ Visualization saved to: {output_path}")
-    print(f"\n  Original arrows: {len(ground_truth)}")
-    print(f"  Predicted arrows: {len(predictions)} (after offset filtering + deduplication)")
+    print(f"\n  Time window analyzed: {start_time}s - {start_time + duration}s")
+    print(f"  Original arrows: {len(ground_truth)}")
+    print(f"  Predicted arrows: {len(predictions)}")
     print(f"  Detection rate: {len(predictions)}/{len(ground_truth)} ({100*len(predictions)/max(1,len(ground_truth)):.1f}%)")
     
     # Print statistics about filtered predictions
@@ -256,8 +233,6 @@ def main():
     print("The figure shows:")
     print("  • Left column: Original arrow pattern from .sm file")
     print("  • Right column: ML model predictions from sensor data")
-    print(f"  • Only predictions with |offset| ≤ {offset_threshold:.2f}s are shown")
-    print("  • This filtering reduces duplicate predictions")
     print("  • Arrows colored by type (Left=Pink, Down=Cyan, Up=Yellow, Right=Red)")
     print("  • Time flows from bottom to top (like StepMania gameplay)")
     print("="*70)
