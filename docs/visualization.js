@@ -175,7 +175,7 @@ class ArrowVisualizer {
         for (let lane = 0; lane < 4; lane++) {
             if (event.arrows[lane] === 1) {
                 const x = (lane + 0.5) * this.laneWidth;
-                this.drawArrow(svg, x, y, lane);
+                this.drawArrow(svg, x, y, lane, event.time);
             }
         }
     }
@@ -186,8 +186,9 @@ class ArrowVisualizer {
      * @param {number} x - X position (center)
      * @param {number} y - Y position (center)
      * @param {number} arrowType - Arrow type (0=Left, 1=Down, 2=Up, 3=Right)
+     * @param {number} time - Time in seconds (for tooltip)
      */
-    drawArrow(svg, x, y, arrowType) {
+    drawArrow(svg, x, y, arrowType, time = 0) {
         const size = this.arrowSize;
         const color = this.arrowColors[arrowType];
 
@@ -218,7 +219,7 @@ class ArrowVisualizer {
         
         // Add tooltip
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-        title.textContent = `${this.arrowNames[arrowType]} at ${event.time.toFixed(2)}s`;
+        title.textContent = `${this.arrowNames[arrowType]} at ${time.toFixed(2)}s`;
         polygon.appendChild(title);
 
         svg.appendChild(polygon);
