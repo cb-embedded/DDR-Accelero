@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDR Accelero - Web Inference</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 DDR Accelero - Web Inference</h1>
+            <p class="subtitle">Machine Learning-based Dance Dance Revolution Arrow Prediction</p>
+        </header>
+
+        <div class="instructions">
+            <h2>📋 Instructions</h2>
+            <ol>
+                <li><strong>Upload Sensor Capture:</strong> Select a .zip file containing sensor data (Gravity.csv, Gyroscope.csv, Magnetometer.csv)</li>
+                <li><strong>Upload Chart File:</strong> Select the corresponding .sm (StepMania) file for comparison</li>
+                <li><strong>Select Difficulty:</strong> Choose the difficulty level to analyze</li>
+                <li><strong>Run Inference:</strong> Click "Predict Arrows" to generate predictions</li>
+                <li><strong>View Results:</strong> Scroll through the visualization to compare predictions vs ground truth</li>
+            </ol>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-group">
+                <h3>1️⃣ Sensor Capture</h3>
+                <input type="file" id="zipFile" accept=".zip" />
+                <div id="zipStatus" class="status"></div>
+            </div>
+
+            <div class="upload-group">
+                <h3>2️⃣ Chart File (.sm)</h3>
+                <input type="file" id="smFile" accept=".sm" />
+                <div id="smStatus" class="status"></div>
+            </div>
+
+            <div class="upload-group">
+                <h3>3️⃣ Difficulty Level</h3>
+                <select id="difficulty">
+                    <option value="5">5 (Easy/Medium)</option>
+                    <option value="6">6 (Medium)</option>
+                    <option value="7">7 (Medium/Hard)</option>
+                    <option value="8">8 (Hard)</option>
+                    <option value="9">9 (Hard/Expert)</option>
+                    <option value="10">10 (Expert)</option>
+                </select>
+            </div>
+
+            <div class="upload-group">
+                <h3>4️⃣ Run Inference</h3>
+                <button id="predictButton" disabled>Predict Arrows</button>
+                <div id="progress" class="status"></div>
+            </div>
+        </div>
+
+        <div id="results" class="results-section" style="display: none;">
+            <h2>📊 Results</h2>
+            <div id="stats" class="stats"></div>
+            <div class="visualization-container">
+                <div id="visualization" class="visualization"></div>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                <a href="https://github.com/cb-embedded/DDR-Accelero" target="_blank">GitHub Repository</a> | 
+                Built with ❤️ for DDR enthusiasts
+            </p>
+        </footer>
+    </div>
+
+    <script src="sm-parser.js"></script>
+    <script src="zip-handler.js"></script>
+    <script src="inference.js"></script>
+    <script src="visualization.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -2,6 +2,19 @@
 
 Alignment tool for Dance Dance Revolution (DDR) accelerometer data with StepMania chart files.
 
+## 🌐 Web Application
+
+**Try it online:** [https://cb-embedded.github.io/DDR-Accelero/](https://cb-embedded.github.io/DDR-Accelero/)
+
+The web application allows you to:
+- Upload sensor capture ZIP files (from Android Sensor Logger)
+- Upload StepMania (.sm) chart files
+- Run ML inference in your browser to predict arrow patterns
+- Visualize predictions vs ground truth side-by-side
+- Compare results with interactive scrollable visualization
+
+No installation required - everything runs directly in your browser!
+
 ## Current Status
 
 **Working solution implemented** using biomechanical approach with clear correlation peaks.
