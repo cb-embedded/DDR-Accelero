@@ -93,10 +93,11 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
             # Find the window center in sensor timeline
             center_idx = np.searchsorted(t_sensor, pred_time)
             
-            # Extract window: we need 198 samples total, so 99 on each side
+            # Extract window: we need 198 samples total
+            # Using half_samples approach: center_idx - 99 to center_idx + 99 gives 198 samples
             half_samples = expected_timesteps // 2  # 99
             start_idx = center_idx - half_samples
-            end_idx = center_idx + half_samples
+            end_idx = start_idx + expected_timesteps  # Ensure exactly 198 samples
             
             # Skip if window is out of bounds
             if start_idx < 0 or end_idx >= len(sensors):
