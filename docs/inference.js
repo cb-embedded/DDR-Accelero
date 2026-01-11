@@ -9,6 +9,8 @@ class InferenceEngine {
         this.isModelLoaded = false;
         this.seqLength = 198;
         this.windowSize = 2.0; // 2 seconds
+        this.numChannels = 9;
+        this.confidenceThreshold = 0.5;
     }
 
     /**
@@ -25,7 +27,13 @@ class InferenceEngine {
             console.log('ONNX model loaded successfully');
         } catch (error) {
             console.error('Failed to load ONNX model:', error);
-            throw new Error('Failed to load ONNX model: ' + error.message);
+            throw new Error(
+                'Failed to load ONNX model. Please ensure:\n' +
+                '1. model.onnx and model.onnx.data files exist in the docs/ directory\n' +
+                '2. Files are accessible from the web server\n' +
+                '3. Run "python export_model_to_onnx.py" to generate the model\n' +
+                'Error: ' + error.message
+            );
         }
     }
 
@@ -103,10 +111,10 @@ class InferenceEngine {
         }
 
         // Stack all channels: [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z, grav_x, grav_y, grav_z]
-        // Shape: [9, seqLength]
-        const input = new Float32Array(9 * this.seqLength);
+        // Shape: [numChannels, seqLength]
+        const input = new Float32Array(this.numChannels * this.seqLength);
         
-        for (let ch = 0; ch < 9; ch++) {
+        for (let ch = 0; ch < this.numChannels; ch++) {
             for (let t = 0; t < this.seqLength; t++) {
                 input[ch * this.seqLength + t] = resampled[ch][t];
             }
@@ -173,14 +181,23 @@ class InferenceEngine {
     }
 
     /**
+     * Apply sigmoid activation function
+     * @param {number} x - Input value
+     * @returns {number} Sigmoid output
+     */
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-x));
+    }
+
+    /**
      * Run ONNX inference on a window
-     * @param {Float32Array} windowData - Window data [9 x seqLength]
+     * @param {Float32Array} windowData - Window data [numChannels x seqLength]
      * @returns {Promise<Object>} Prediction result {arrows, offset, confidence}
      */
     async runInference(windowData) {
         try {
-            // Prepare input tensor: [batch_size=1, channels=9, time_steps=seqLength]
-            const inputTensor = new ort.Tensor('float32', windowData, [1, 9, this.seqLength]);
+            // Prepare input tensor: [batch_size=1, channels=numChannels, time_steps=seqLength]
+            const inputTensor = new ort.Tensor('float32', windowData, [1, this.numChannels, this.seqLength]);
             
             // Run inference
             const feeds = { input: inputTensor };
@@ -191,10 +208,10 @@ class InferenceEngine {
             const offsetOutput = results.offset.data; // [1, 1]
             
             // Apply sigmoid to arrows (probabilities)
-            const arrows = Array.from(arrowsOutput).map(x => 1 / (1 + Math.exp(-x)));
+            const arrows = Array.from(arrowsOutput).map(x => this.sigmoid(x));
             
-            // Threshold arrows at 0.5
-            const arrowsBinary = arrows.map(x => x > 0.5 ? 1 : 0);
+            // Threshold arrows
+            const arrowsBinary = arrows.map(x => x > this.confidenceThreshold ? 1 : 0);
             
             // Get offset (time adjustment)
             const offset = offsetOutput[0];
