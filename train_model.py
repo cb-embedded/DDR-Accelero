@@ -34,7 +34,10 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
     Load multiple captures and create unified dataset.
     
     Args:
-        capture_configs: List of tuples (capture_path, sm_path, diff_level)
+        capture_configs: List of tuples (capture_path, sm_path, diff_level[, diff_type])
+                        For backward compatibility, diff_type is optional and defaults to 'medium'.
+                        - 3-tuple format: (capture_path, sm_path, diff_level)
+                        - 4-tuple format: (capture_path, sm_path, diff_level, diff_type)
         window_size: Window size for samples (default 1.0s)
     
     Returns:
@@ -46,7 +49,16 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
     all_Y = []
     all_offsets = []
     
-    for i, (capture_path, sm_path, diff_level) in enumerate(capture_configs):
+    DEFAULT_DIFFICULTY_TYPE = 'medium'
+    
+    for i, config in enumerate(capture_configs):
+        # Support both old format (3 args) and new format (4 args)
+        if len(config) == 3:
+            capture_path, sm_path, diff_level = config
+            diff_type = DEFAULT_DIFFICULTY_TYPE
+        else:
+            capture_path, sm_path, diff_level, diff_type = config
+        
         print(f"\n[{i+1}/{len(capture_configs)}] Processing: {Path(capture_path).name}")
         
         # Load sensor data
@@ -55,11 +67,11 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
         
         # Parse SM file
         print("  Parsing SM file...")
-        t_arrows, arrows, bpm = parse_sm_file(sm_path, diff_level, diff_type='medium')
+        t_arrows, arrows, bpm = parse_sm_file(sm_path, diff_level, diff_type=diff_type)
         
         # Align
         print("  Aligning...")
-        result = align_capture(capture_path, sm_path, diff_level, diff_type='medium', verbose=False)
+        result = align_capture(capture_path, sm_path, diff_level, diff_type=diff_type, verbose=False)
         offset = result['offset']
         
         # Create dataset
@@ -795,24 +807,41 @@ PREDICTION RESULTS:
 
 
 def main():
+    DEFAULT_DIFFICULTY_TYPE = 'medium'
+    VALID_DIFFICULTY_TYPES = ['easy', 'medium', 'hard']
+    
     if len(sys.argv) < 2:
         print(__doc__)
-        print("\nUsage: python train_model.py <capture1_zip> <sm1_file> <diff1_level> [<capture2_zip> <sm2_file> <diff2_level> ...]")
+        print("\nUsage: python train_model.py <capture1_zip> <sm1_file> <diff1_level> [diff1_type] [<capture2_zip> <sm2_file> <diff2_level> [diff2_type] ...]")
         print("\nExample:")
         print("  python train_model.py \\")
-        print("    'raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip' 'sm_files/Lucky Orb.sm' 5 \\")
-        print("    'raw_data/Decorator_Medium_6-2026-01-07_06-27-54.zip' 'sm_files/Decorator.sm' 6")
+        print("    'raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip' 'sm_files/Lucky Orb.sm' 5 medium \\")
+        print("    'raw_data/Decorator_Medium_6-2026-01-07_06-27-54.zip' 'sm_files/Decorator.sm' 6 medium")
         sys.exit(1)
     
-    # Parse arguments (groups of 3)
+    # Parse arguments (groups of 3 or 4: capture_zip, sm_file, diff_level, [diff_type])
     args = sys.argv[1:]
-    if len(args) % 3 != 0:
-        print("Error: Arguments must be in groups of 3 (capture_zip, sm_file, diff_level)")
-        sys.exit(1)
     
     capture_configs = []
-    for i in range(0, len(args), 3):
-        capture_configs.append((args[i], args[i+1], int(args[i+2])))
+    i = 0
+    while i < len(args):
+        if i + 2 >= len(args):
+            print(f"Error: Incomplete argument group at position {i}")
+            sys.exit(1)
+        
+        capture = args[i]
+        sm_file = args[i+1]
+        diff_level = int(args[i+2])
+        
+        # Check if next argument is difficulty type or next capture
+        if i + 3 < len(args) and args[i+3].lower() in VALID_DIFFICULTY_TYPES:
+            diff_type = args[i+3].lower()
+            i += 4
+        else:
+            diff_type = DEFAULT_DIFFICULTY_TYPE
+            i += 3
+        
+        capture_configs.append((capture, sm_file, diff_level, diff_type))
     
     print("="*70)
     print("DDR MACHINE LEARNING PIPELINE - CNN")
