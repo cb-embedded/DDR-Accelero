@@ -33,3 +33,8 @@ artifacts/training_history.png
 # Test scripts
 test_onnx_model.py
 test_onnx_real_data.py
+
+# Node modules
+node_modules/
+package.json
+package-lock.json
