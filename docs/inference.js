@@ -24,9 +24,11 @@ class InferenceEngine {
             // Configure ONNX Runtime Web environment
             // Set WASM paths to the lib directory where we placed the WASM files
             ort.env.wasm.wasmPaths = 'lib/';
+            // Use single thread to avoid cross-origin isolation warnings
+            ort.env.wasm.numThreads = 1;
             
             // Load ONNX model
-            // The model uses external data format, so model.onnx.data must be accessible
+            // The model uses opset 18 and requires ONNX Runtime Web 1.18.0 or later
             this.session = await ort.InferenceSession.create('model.onnx');
             this.isModelLoaded = true;
             console.log('ONNX model loaded successfully');
@@ -35,9 +37,9 @@ class InferenceEngine {
             const errorMsg = error?.message || String(error) || 'Unknown error';
             throw new Error(
                 'Failed to load ONNX model. Please ensure:\n' +
-                '1. model.onnx and model.onnx.data files exist in the docs/ directory\n' +
+                '1. model.onnx file exists in the docs/ directory\n' +
                 '2. Files are accessible from the web server\n' +
-                '3. Run "python export_model_to_onnx.py" to generate the model\n' +
+                '3. ONNX Runtime Web libraries are in docs/lib/\n' +
                 'Error details: ' + errorMsg
             );
         }
