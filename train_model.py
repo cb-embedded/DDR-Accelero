@@ -43,11 +43,9 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
     Returns:
         X: Combined sensor data [N x window_samples x 9]
         Y: Combined arrow labels [N x 4]
-        offsets: Combined time offsets [N]
     """
     all_X = []
     all_Y = []
-    all_offsets = []
     
     DEFAULT_DIFFICULTY_TYPE = 'medium'
     
@@ -74,44 +72,41 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
         result = align_capture(capture_path, sm_path, diff_level, diff_type=diff_type, verbose=False)
         offset = result['offset']
         
-        # Create dataset
-        print("  Creating dataset...")
-        X, Y, arrow_offsets, _ = create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=window_size)
+        # Create dataset with balanced classes
+        print("  Creating balanced dataset...")
+        X, Y, _ = create_dataset(t_sensor, sensors, t_arrows, arrows, offset, 
+                                 window_size=window_size, balance_classes=True)
         
         print(f"  Samples: {len(X)}")
         # Skip captures with no samples
         if len(X) > 0:
             all_X.append(X)
             all_Y.append(Y)
-            all_offsets.append(arrow_offsets)
         else:
             print(f"  Warning: Skipping capture with 0 samples")
     
     # Combine all datasets
     X = np.concatenate(all_X, axis=0)
     Y = np.concatenate(all_Y, axis=0)
-    offsets = np.concatenate(all_offsets, axis=0)
     
-    return X, Y, offsets
+    return X, Y
 
 
 class ArrowCNN(nn.Module):
     """
-    1D CNN for predicting arrow combinations AND offsets from sensor time series.
+    1D CNN for predicting arrow combinations from sensor time series.
     
     Architecture:
     - Input: [batch_size, 9 channels, time_steps]
     - 3 Conv1D layers with batch norm and max pooling
-    - Shared fully connected layers
-    - Two output heads:
-      1. Arrow classification: [batch_size, 4] (probabilities for each arrow)
-      2. Offset regression: [batch_size, 1] (time offset in seconds)
+    - Fully connected layers
+    - Output: Arrow classification [batch_size, 4] (probabilities for each arrow)
     """
     
     def __init__(self, input_channels=9, seq_length=198):
         super(ArrowCNN, self).__init__()
         
-        # Convolutional layers (shared feature extraction)
+        # Convolutional layers (feature extraction)
         self.conv1 = nn.Conv1d(input_channels, 32, kernel_size=7, padding=3)
         self.bn1 = nn.BatchNorm1d(32)
         self.pool1 = nn.MaxPool1d(2)
@@ -128,23 +123,20 @@ class ArrowCNN(nn.Module):
         # seq_length -> seq_length/2 -> seq_length/4 -> seq_length/8
         conv_output_size = (seq_length // 8) * 128
         
-        # Shared fully connected layers
+        # Fully connected layers
         self.fc1 = nn.Linear(conv_output_size, 256)
         self.dropout1 = nn.Dropout(0.5)
         self.fc2 = nn.Linear(256, 128)
         self.dropout2 = nn.Dropout(0.3)
         
-        # Arrow classification head
+        # Arrow classification output
         self.fc_arrows = nn.Linear(128, 4)  # 4 arrows
-        
-        # Offset regression head
-        self.fc_offset = nn.Linear(128, 1)  # 1 offset value
         
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
     
     def forward(self, x):
-        # Conv layers (shared feature extraction)
+        # Conv layers (feature extraction)
         x = self.pool1(self.relu(self.bn1(self.conv1(x))))
         x = self.pool2(self.relu(self.bn2(self.conv2(x))))
         x = self.pool3(self.relu(self.bn3(self.conv3(x))))
@@ -152,30 +144,27 @@ class ArrowCNN(nn.Module):
         # Flatten
         x = x.view(x.size(0), -1)
         
-        # Shared FC layers
+        # FC layers
         x = self.relu(self.fc1(x))
         x = self.dropout1(x)
         x = self.relu(self.fc2(x))
         x = self.dropout2(x)
         
-        # Two output heads
+        # Arrow output
         arrows = self.sigmoid(self.fc_arrows(x))  # Sigmoid for multi-label classification
-        offset = self.fc_offset(x)  # Linear output for regression
         
-        return arrows, offset
+        return arrows
 
 
-def train_cnn_model(X_train, Y_train, offsets_train, X_val, Y_val, offsets_val, epochs=50, batch_size=32, lr=0.001):
+def train_cnn_model(X_train, Y_train, X_val, Y_val, epochs=50, batch_size=32, lr=0.001):
     """
-    Train CNN model for arrow prediction AND offset prediction.
+    Train CNN model for arrow prediction.
     
     Args:
         X_train: Training data [N x time_steps x 9]
         Y_train: Training arrow labels [N x 4]
-        offsets_train: Training offsets [N]
         X_val: Validation data [N x time_steps x 9]
         Y_val: Validation arrow labels [N x 4]
-        offsets_val: Validation offsets [N]
         epochs: Number of training epochs
         batch_size: Batch size
         lr: Learning rate
@@ -190,143 +179,99 @@ def train_cnn_model(X_train, Y_train, offsets_train, X_val, Y_val, offsets_val, 
     # Reshape X: [N, time_steps, channels] -> [N, channels, time_steps]
     X_train_t = torch.FloatTensor(X_train).permute(0, 2, 1)
     Y_train_t = torch.FloatTensor(Y_train)
-    offsets_train_t = torch.FloatTensor(offsets_train).unsqueeze(1)  # [N, 1]
     
     X_val_t = torch.FloatTensor(X_val).permute(0, 2, 1)
     Y_val_t = torch.FloatTensor(Y_val)
-    offsets_val_t = torch.FloatTensor(offsets_val).unsqueeze(1)  # [N, 1]
     
     # Create data loaders
-    train_dataset = TensorDataset(X_train_t, Y_train_t, offsets_train_t)
+    train_dataset = TensorDataset(X_train_t, Y_train_t)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     
-    val_dataset = TensorDataset(X_val_t, Y_val_t, offsets_val_t)
+    val_dataset = TensorDataset(X_val_t, Y_val_t)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
     # Initialize model
     model = ArrowCNN(input_channels=9, seq_length=X_train.shape[1])
     model = model.to(device)
     
-    # Loss functions for multi-task learning
-    criterion_arrows = nn.BCELoss()  # Binary Cross Entropy for multi-label classification
-    criterion_offset = nn.MSELoss()  # Mean Squared Error for regression
-    
-    # Loss weights (can be tuned)
-    weight_arrows = 5.0  # Increase weight to focus more on arrow accuracy
-    weight_offset = 1.0  # Offset prediction is already good
+    # Loss function - BCELoss for multi-label classification
+    # Note: Dataset is now balanced, so no need for class weights
+    criterion = nn.BCELoss()
     
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Training history
     history = {
         'train_loss': [],
-        'train_loss_arrows': [],
-        'train_loss_offset': [],
         'val_loss': [],
-        'val_loss_arrows': [],
-        'val_loss_offset': [],
-        'val_exact_match': [],
-        'val_offset_mae': []
+        'val_exact_match': []
     }
     
     best_val_loss = float('inf')
     best_model_state = None
     
-    print("\nTraining CNN model (Multi-task: Arrows + Offset)...")
-    print(f"Loss weights: Arrows={weight_arrows:.1f}, Offset={weight_offset:.1f}")
+    print("\nTraining CNN model (Arrow Classification)...")
     
     for epoch in range(epochs):
         # Training
         model.train()
         train_loss = 0.0
-        train_loss_arrows = 0.0
-        train_loss_offset = 0.0
         
-        for batch_X, batch_Y, batch_offsets in train_loader:
+        for batch_X, batch_Y in train_loader:
             batch_X = batch_X.to(device)
             batch_Y = batch_Y.to(device)
-            batch_offsets = batch_offsets.to(device)
             
             optimizer.zero_grad()
             
             # Forward pass
-            arrows_out, offset_out = model(batch_X)
+            arrows_out = model(batch_X)
             
-            # Calculate losses
-            loss_arrows = criterion_arrows(arrows_out, batch_Y)
-            loss_offset = criterion_offset(offset_out, batch_offsets)
-            
-            # Combined loss
-            loss = weight_arrows * loss_arrows + weight_offset * loss_offset
+            # Calculate loss
+            loss = criterion(arrows_out, batch_Y)
             
             loss.backward()
             optimizer.step()
             
             train_loss += loss.item() * batch_X.size(0)
-            train_loss_arrows += loss_arrows.item() * batch_X.size(0)
-            train_loss_offset += loss_offset.item() * batch_X.size(0)
         
         train_loss /= len(train_loader.dataset)
-        train_loss_arrows /= len(train_loader.dataset)
-        train_loss_offset /= len(train_loader.dataset)
         
         # Validation
         model.eval()
         val_loss = 0.0
-        val_loss_arrows = 0.0
-        val_loss_offset = 0.0
         all_preds = []
         all_labels = []
-        all_offset_preds = []
-        all_offset_labels = []
         
         with torch.no_grad():
-            for batch_X, batch_Y, batch_offsets in val_loader:
+            for batch_X, batch_Y in val_loader:
                 batch_X = batch_X.to(device)
                 batch_Y = batch_Y.to(device)
-                batch_offsets = batch_offsets.to(device)
                 
-                arrows_out, offset_out = model(batch_X)
+                arrows_out = model(batch_X)
                 
-                loss_arrows = criterion_arrows(arrows_out, batch_Y)
-                loss_offset = criterion_offset(offset_out, batch_offsets)
-                loss = weight_arrows * loss_arrows + weight_offset * loss_offset
+                loss = criterion(arrows_out, batch_Y)
                 
                 val_loss += loss.item() * batch_X.size(0)
-                val_loss_arrows += loss_arrows.item() * batch_X.size(0)
-                val_loss_offset += loss_offset.item() * batch_X.size(0)
                 
                 # Convert probabilities to binary predictions
                 preds = (arrows_out > 0.5).float().cpu().numpy()
                 all_preds.append(preds)
                 all_labels.append(batch_Y.cpu().numpy())
-                all_offset_preds.append(offset_out.cpu().numpy())
-                all_offset_labels.append(batch_offsets.cpu().numpy())
         
         val_loss /= len(val_loader.dataset)
-        val_loss_arrows /= len(val_loader.dataset)
-        val_loss_offset /= len(val_loader.dataset)
         
         # Calculate metrics
         all_preds = np.vstack(all_preds)
         all_labels = np.vstack(all_labels)
-        all_offset_preds = np.vstack(all_offset_preds)
-        all_offset_labels = np.vstack(all_offset_labels)
         
         exact_match = np.mean(np.all(all_preds == all_labels, axis=1))
-        offset_mae = np.mean(np.abs(all_offset_preds - all_offset_labels))
         
         # Save history
         history['train_loss'].append(train_loss)
-        history['train_loss_arrows'].append(train_loss_arrows)
-        history['train_loss_offset'].append(train_loss_offset)
         history['val_loss'].append(val_loss)
-        history['val_loss_arrows'].append(val_loss_arrows)
-        history['val_loss_offset'].append(val_loss_offset)
         history['val_exact_match'].append(exact_match)
-        history['val_offset_mae'].append(offset_mae)
         
-        # Save best model (based on combined validation loss)
+        # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_model_state = model.state_dict().copy()
@@ -334,9 +279,9 @@ def train_cnn_model(X_train, Y_train, offsets_train, X_val, Y_val, offsets_val, 
         # Print progress every 5 epochs
         if (epoch + 1) % 5 == 0 or epoch == 0:
             print(f"Epoch [{epoch+1}/{epochs}] - "
-                  f"Train Loss: {train_loss:.4f} (Arr: {train_loss_arrows:.4f}, Off: {train_loss_offset:.4f}), "
-                  f"Val Loss: {val_loss:.4f} (Arr: {val_loss_arrows:.4f}, Off: {val_loss_offset:.4f}), "
-                  f"Val Exact Match: {exact_match:.1%}, Val Offset MAE: {offset_mae:.3f}s")
+                  f"Train Loss: {train_loss:.4f}, "
+                  f"Val Loss: {val_loss:.4f}, "
+                  f"Val Exact Match: {exact_match:.1%}")
     
     # Load best model
     model.load_state_dict(best_model_state)
@@ -345,7 +290,7 @@ def train_cnn_model(X_train, Y_train, offsets_train, X_val, Y_val, offsets_val, 
     return model, history
 
 
-def evaluate_cnn_model(model, X_test, Y_test, offsets_test, batch_size=32):
+def evaluate_cnn_model(model, X_test, Y_test, batch_size=32):
     """
     Evaluate CNN model on test set.
     
@@ -353,7 +298,6 @@ def evaluate_cnn_model(model, X_test, Y_test, offsets_test, batch_size=32):
         model: Trained CNN model
         X_test: Test data [N x time_steps x 9]
         Y_test: Test arrow labels [N x 4]
-        offsets_test: Test offsets [N]
         batch_size: Batch size for evaluation
     
     Returns:
@@ -366,25 +310,20 @@ def evaluate_cnn_model(model, X_test, Y_test, offsets_test, batch_size=32):
     # Reshape X: [N, time_steps, channels] -> [N, channels, time_steps]
     X_test_t = torch.FloatTensor(X_test).permute(0, 2, 1)
     Y_test_t = torch.FloatTensor(Y_test)
-    offsets_test_t = torch.FloatTensor(offsets_test).unsqueeze(1)
     
-    test_dataset = TensorDataset(X_test_t, Y_test_t, offsets_test_t)
+    test_dataset = TensorDataset(X_test_t, Y_test_t)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
     all_arrow_preds = []
-    all_offset_preds = []
     
     with torch.no_grad():
-        for batch_X, _, _ in test_loader:
+        for batch_X, _ in test_loader:
             batch_X = batch_X.to(device)
-            arrows_out, offset_out = model(batch_X)
+            arrows_out = model(batch_X)
             arrow_preds = (arrows_out > 0.5).float().cpu().numpy()
-            offset_preds = offset_out.cpu().numpy()
             all_arrow_preds.append(arrow_preds)
-            all_offset_preds.append(offset_preds)
     
     Y_pred = np.vstack(all_arrow_preds)
-    offset_pred = np.vstack(all_offset_preds).squeeze()
     
     arrow_names = ['Left', 'Down', 'Up', 'Right']
     
@@ -403,13 +342,6 @@ def evaluate_cnn_model(model, X_test, Y_test, offsets_test, batch_size=32):
     # Average accuracy across arrows
     avg_accuracy = np.mean(per_arrow_acc)
     
-    # Offset metrics
-    offset_mae = np.mean(np.abs(offset_pred - offsets_test))
-    offset_rmse = np.sqrt(np.mean((offset_pred - offsets_test)**2))
-    offset_within_100ms = np.mean(np.abs(offset_pred - offsets_test) < 0.1)
-    offset_within_250ms = np.mean(np.abs(offset_pred - offsets_test) < 0.25)
-    offset_within_500ms = np.mean(np.abs(offset_pred - offsets_test) < 0.5)
-    
     metrics = {
         'exact_match': exact_match,
         'per_arrow_accuracy': per_arrow_acc,
@@ -417,14 +349,7 @@ def evaluate_cnn_model(model, X_test, Y_test, offsets_test, batch_size=32):
         'hamming_loss': ham_loss,
         'arrow_names': arrow_names,
         'Y_pred': Y_pred,
-        'Y_test': Y_test,
-        'offset_pred': offset_pred,
-        'offset_test': offsets_test,
-        'offset_mae': offset_mae,
-        'offset_rmse': offset_rmse,
-        'offset_within_100ms': offset_within_100ms,
-        'offset_within_250ms': offset_within_250ms,
-        'offset_within_500ms': offset_within_500ms
+        'Y_test': Y_test
     }
     
     return metrics
@@ -467,6 +392,7 @@ def print_results(metrics, Y_train):
     print("  • TRUE: Left only [1,0,0,0]  →  PREDICTED: Left only [1,0,0,0]  ✓ CORRECT")
     print("  • TRUE: Left only [1,0,0,0]  →  PREDICTED: Left+Up [1,0,1,0]   ✗ WRONG")
     print("  • TRUE: Left+Up [1,0,1,0]    →  PREDICTED: Left+Up [1,0,1,0]   ✓ CORRECT")
+    print("  • TRUE: Nothing [0,0,0,0]    →  PREDICTED: Nothing [0,0,0,0]   ✓ CORRECT")
     print("\nA prediction is correct ONLY if all 4 arrows match exactly.")
     print("This is much harder than per-arrow accuracy!")
     print("-"*70)
@@ -491,39 +417,16 @@ def print_results(metrics, Y_train):
     
     print(f"{'='*70}")
     
-    # OFFSET PREDICTION METRICS
-    print("\n" + "="*70)
-    print("OFFSET PREDICTION METRICS (NEW!)")
-    print("="*70)
-    print("\nThe model now predicts WHEN arrows occur relative to window center:")
-    print(f"\n  Mean Absolute Error (MAE):        {metrics['offset_mae']:.3f}s ({metrics['offset_mae']*1000:.0f}ms)")
-    print(f"  Root Mean Squared Error (RMSE):   {metrics['offset_rmse']:.3f}s ({metrics['offset_rmse']*1000:.0f}ms)")
-    print(f"\n  Predictions within 100ms:         {metrics['offset_within_100ms']:.1%}")
-    print(f"  Predictions within 250ms:         {metrics['offset_within_250ms']:.1%}")
-    print(f"  Predictions within 500ms:         {metrics['offset_within_500ms']:.1%}")
-    
-    print(f"\n  Offset range in test set:         [{metrics['offset_test'].min():.2f}s, {metrics['offset_test'].max():.2f}s]")
-    print(f"  Offset std dev (test):            {metrics['offset_test'].std():.3f}s")
-    
-    # Assess offset prediction quality
-    print("\n  OFFSET PREDICTION ASSESSMENT:")
-    if metrics['offset_mae'] < 0.1:
-        print("  ✓✓✓ EXCELLENT - Very precise timing prediction!")
-    elif metrics['offset_mae'] < 0.25:
-        print("  ✓✓ GOOD - Useful for gameplay guidance")
-    elif metrics['offset_mae'] < 0.5:
-        print("  ✓ MODERATE - Shows temporal awareness")
-    else:
-        print("  ✗ WEAK - Needs improvement for practical use")
-    
-    print("="*70)
-    
     # Distribution in test set
     print("\nLabel Distribution in Test Set:")
     for i, name in enumerate(metrics['arrow_names']):
         count = np.sum(metrics['Y_test'][:, i])
         total = len(metrics['Y_test'])
         print(f"  {name:5s}: {count}/{total} ({count/total*100:.1f}%)")
+    
+    # Count "nothing" samples
+    num_nothing = np.sum(np.all(metrics['Y_test'] == 0, axis=1))
+    print(f"  Nothing: {num_nothing}/{len(metrics['Y_test'])} ({num_nothing/len(metrics['Y_test'])*100:.1f}%)")
     
     # Show most common combinations
     print("\nMost Common Arrow Combinations in Test Set:")
@@ -532,7 +435,7 @@ def print_results(metrics, Y_train):
     for combo, count in test_combo_counts.most_common(10):
         combo_str = ' + '.join([arrow_names[i] for i, v in enumerate(combo) if v == 1])
         if not combo_str:
-            combo_str = 'None'
+            combo_str = 'Nothing'
         pct = count / len(metrics['Y_test']) * 100
         print(f"  {combo_str:20s}: {count:3d} ({pct:4.1f}%)")
     
@@ -620,45 +523,30 @@ def print_results(metrics, Y_train):
     else:
         print(f"   • Assessment: WEAK - Limited predictive capability")
     
-    print(f"\n2. OFFSET PREDICTION PERFORMANCE (NEW!):")
-    print(f"   • MAE: {metrics['offset_mae']:.3f}s ({metrics['offset_mae']*1000:.0f}ms)")
-    print(f"   • Within 100ms: {metrics['offset_within_100ms']:.1%}")
-    print(f"   • Within 250ms: {metrics['offset_within_250ms']:.1%}")
-    
-    if metrics['offset_mae'] < 0.1:
-        print(f"   • Assessment: EXCELLENT timing precision")
-    elif metrics['offset_mae'] < 0.25:
-        print(f"   • Assessment: GOOD - Useful for real-time guidance")
-    elif metrics['offset_mae'] < 0.5:
-        print(f"   • Assessment: MODERATE - Shows temporal awareness")
-    else:
-        print(f"   • Assessment: NEEDS IMPROVEMENT")
-    
-    print(f"\n3. TASK DIFFICULTY:")
-    print(f"   • Multi-task learning: Arrow classification + Offset regression")
+    print(f"\n2. TASK DIFFICULTY:")
     print(f"   • Exact combination matching (all 4 arrows must be correct)")
-    print(f"   • Temporal prediction (when arrow occurs relative to window)")
+    print(f"   • Includes 'nothing pressed' samples (> 50ms from arrows)")
     print(f"   • Real-world noisy sensor data from mobile device")
     print(f"   • Complex human movement patterns with individual variations")
     
-    print(f"\n4. PRACTICAL IMPLICATIONS:")
-    if metrics['exact_match'] > 0.15 and metrics['offset_mae'] < 0.3:
-        print(f"   • Model successfully predicts both WHAT and WHEN")
+    print(f"\n3. PRACTICAL IMPLICATIONS:")
+    if metrics['exact_match'] > 0.15:
+        print(f"   • Model successfully predicts arrow combinations")
         print(f"   • Ready for real-world gameplay assistance")
-        print(f"   • Can guide players on arrow patterns and timing")
-    elif metrics['exact_match'] > 0.10 or metrics['offset_mae'] < 0.5:
-        print(f"   • Model shows promise in multi-task prediction")
+        print(f"   • Can guide players on arrow patterns")
+    elif metrics['exact_match'] > 0.10:
+        print(f"   • Model shows promise in arrow prediction")
         print(f"   • Useful for gameplay guidance with some limitations")
         print(f"   • Further training may improve performance")
     else:
         print(f"   • Model needs improvement for practical use")
         print(f"   • Consider more training data or architecture changes")
     
-    print(f"\n5. KEY ACHIEVEMENT:")
-    print(f"   • ✓ Model now predicts BOTH arrows AND offsets!")
-    print(f"   • ✓ Enables real-world inference on arbitrary sensor windows")
-    print(f"   • ✓ Addresses the limitation mentioned in README")
-    print(f"   • ✓ Can guide players: 'Press Left+Up in 0.2 seconds'")
+    print(f"\n4. KEY CHANGES IN THIS VERSION:")
+    print(f"   • ✓ Removed offset prediction (simpler classification task)")
+    print(f"   • ✓ 50ms threshold: arrows within 50ms → labeled, else 'nothing'")
+    print(f"   • ✓ Cleaner task: predict arrows OR nothing")
+    print(f"   • ✓ More realistic: model learns when NOT to predict")
     
     print("="*70)
 
@@ -674,16 +562,14 @@ def save_model(model, filepath='trained_model.pth'):
     print(f"\nModel saved to: {filepath}")
 
 
-def visualize_predictions(X_raw, Y_test, Y_pred, offsets_test, offsets_pred, indices, output_dir='artifacts'):
+def visualize_predictions(X_raw, Y_test, Y_pred, indices, output_dir='artifacts'):
     """
-    Visualize sample predictions with input sensor data and offset predictions.
+    Visualize sample predictions with input sensor data.
     
     Args:
         X_raw: Raw sensor data windows [N x time_steps x 9]
         Y_test: True arrow labels [N x 4]
         Y_pred: Predicted arrow labels [N x 4]
-        offsets_test: True offsets [N]
-        offsets_pred: Predicted offsets [N]
         indices: List of sample indices to visualize
         output_dir: Directory to save visualizations
     """
@@ -707,8 +593,6 @@ def visualize_predictions(X_raw, Y_test, Y_pred, offsets_test, offsets_pred, ind
         sensor_window = X_raw[idx]  # [time_steps x 9]
         y_true = Y_test[idx]
         y_pred = Y_pred[idx]
-        offset_true = offsets_test[idx]
-        offset_pred = offsets_pred[idx]
         
         # Create time axis (centered at 0)
         n_samples = sensor_window.shape[0]
@@ -724,10 +608,8 @@ def visualize_predictions(X_raw, Y_test, Y_pred, offsets_test, offsets_pred, ind
             ax.set_xlabel('Time (s)', fontsize=8)
             ax.grid(True, alpha=0.3)
             
-            # Mark window center and arrow positions
+            # Mark window center
             ax.axvline(0, color='blue', linestyle='--', linewidth=1.5, alpha=0.7, label='Window center')
-            ax.axvline(offset_true, color='green', linestyle='-', linewidth=2, alpha=0.8, label='True arrow')
-            ax.axvline(offset_pred, color='red', linestyle='--', linewidth=2, alpha=0.8, label='Predicted arrow')
             
             if i == 0:  # Only show legend on first plot
                 ax.legend(fontsize=7, loc='upper right')
@@ -740,22 +622,18 @@ def visualize_predictions(X_raw, Y_test, Y_pred, offsets_test, offsets_pred, ind
         true_arrows = [arrow_names[i] for i, v in enumerate(y_true) if v == 1]
         pred_arrows = [arrow_names[i] for i, v in enumerate(y_pred) if v == 1]
         
-        true_str = ' + '.join(true_arrows) if true_arrows else 'None'
-        pred_str = ' + '.join(pred_arrows) if pred_arrows else 'None'
+        true_str = ' + '.join(true_arrows) if true_arrows else 'Nothing'
+        pred_str = ' + '.join(pred_arrows) if pred_arrows else 'Nothing'
         
         # Check if prediction is correct
-        is_arrow_correct = np.all(y_true == y_pred)
-        offset_error = abs(offset_pred - offset_true)
-        is_offset_good = offset_error < 0.25  # Within 250ms
+        is_correct = np.all(y_true == y_pred)
         
-        arrow_result = '✓ CORRECT' if is_arrow_correct else '✗ WRONG'
-        offset_result = '✓ GOOD' if is_offset_good else '✗ POOR'
+        arrow_result = '✓ CORRECT' if is_correct else '✗ WRONG'
         
         # Create comparison table
         comparison_text = f"""
 PREDICTION RESULTS:
   • Arrows: {arrow_result}
-  • Offset: {offset_result} (Error: {offset_error:.3f}s = {offset_error*1000:.0f}ms)
 
 ╔═══════════════════════════════════════════════════════════════╗
 ║  Arrow    │  True Label  │  Predicted   │  Match?            ║
@@ -772,18 +650,9 @@ PREDICTION RESULTS:
         comparison_text += f"\nCombined Arrow Labels:\n"
         comparison_text += f"  • TRUE:      {true_str}\n"
         comparison_text += f"  • PREDICTED: {pred_str}\n"
-        comparison_text += f"\nOffset (relative to window center):\n"
-        comparison_text += f"  • TRUE:      {offset_true:+.3f}s ({offset_true*1000:+.0f}ms)\n"
-        comparison_text += f"  • PREDICTED: {offset_pred:+.3f}s ({offset_pred*1000:+.0f}ms)\n"
-        comparison_text += f"  • ERROR:     {offset_error:.3f}s ({offset_error*1000:.0f}ms)"
         
-        # Color based on overall quality
-        if is_arrow_correct and is_offset_good:
-            bg_color = 'lightgreen'
-        elif is_arrow_correct or is_offset_good:
-            bg_color = 'wheat'
-        else:
-            bg_color = 'lightcoral'
+        # Color based on result
+        bg_color = 'lightgreen' if is_correct else 'lightcoral'
         
         ax_pred.text(0.5, 0.5, comparison_text,
                     transform=ax_pred.transAxes,
@@ -794,8 +663,7 @@ PREDICTION RESULTS:
                     bbox=dict(boxstyle='round', facecolor=bg_color, alpha=0.3))
         
         # Title
-        overall_status = "EXCELLENT" if (is_arrow_correct and is_offset_good) else \
-                        "GOOD" if (is_arrow_correct or is_offset_good) else "POOR"
+        overall_status = "CORRECT" if is_correct else "WRONG"
         fig.suptitle(f'Sample Prediction #{sample_idx + 1} (Test Index: {idx}) - {overall_status}',
                     fontsize=14, fontweight='bold')
         
@@ -852,13 +720,17 @@ def main():
     print("\n" + "="*70)
     print("STEP 1: LOADING DATASETS")
     print("="*70)
-    X, Y, offsets = load_datasets_from_captures(capture_configs, window_size=1.0)
+    X, Y = load_datasets_from_captures(capture_configs, window_size=1.0)
     
     print(f"\nTotal samples: {len(X)}")
     print(f"X shape: {X.shape} (samples x time_steps x channels)")
     print(f"Y shape: {Y.shape} (samples x arrows)")
-    print(f"Offsets shape: {offsets.shape} (samples)")
-    print(f"Offset range: [{offsets.min():.2f}s, {offsets.max():.2f}s]")
+    
+    # Count "nothing" vs arrow samples
+    num_nothing = np.sum(np.all(Y == 0, axis=1))
+    num_arrows = len(Y) - num_nothing
+    print(f"Samples with arrows: {num_arrows} ({num_arrows/len(Y)*100:.1f}%)")
+    print(f"Samples with nothing: {num_nothing} ({num_nothing/len(Y)*100:.1f}%)")
     
     # Split into train/val/test (60/20/20)
     print("\n" + "="*70)
@@ -866,13 +738,13 @@ def main():
     print("="*70)
     
     # First split: 80% train+val, 20% test
-    X_trainval, X_test, Y_trainval, Y_test, offsets_trainval, offsets_test = train_test_split(
-        X, Y, offsets, test_size=0.2, random_state=42, stratify=None
+    X_trainval, X_test, Y_trainval, Y_test = train_test_split(
+        X, Y, test_size=0.2, random_state=42, stratify=None
     )
     
     # Second split: 75% train, 25% val (of the 80%)
-    X_train, X_val, Y_train, Y_val, offsets_train, offsets_val = train_test_split(
-        X_trainval, Y_trainval, offsets_trainval, test_size=0.25, random_state=42, stratify=None
+    X_train, X_val, Y_train, Y_val = train_test_split(
+        X_trainval, Y_trainval, test_size=0.25, random_state=42, stratify=None
     )
     
     print(f"Training samples: {len(X_train)}")
@@ -881,47 +753,31 @@ def main():
     
     # Train CNN model
     print("\n" + "="*70)
-    print("STEP 3: TRAINING CNN MODEL (Multi-task: Arrows + Offset)")
+    print("STEP 3: TRAINING CNN MODEL (Arrow Classification)")
     print("="*70)
-    model, history = train_cnn_model(X_train, Y_train, offsets_train, 
-                                     X_val, Y_val, offsets_val,
+    model, history = train_cnn_model(X_train, Y_train, 
+                                     X_val, Y_val,
                                      epochs=100, batch_size=32, lr=0.001)
     
     # Plot training history
     print("\nPlotting training history...")
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     
     # Loss plots
-    axes[0, 0].plot(history['train_loss'], label='Train Loss (Combined)')
-    axes[0, 0].plot(history['val_loss'], label='Val Loss (Combined)')
-    axes[0, 0].set_xlabel('Epoch')
-    axes[0, 0].set_ylabel('Loss')
-    axes[0, 0].set_title('Combined Training and Validation Loss')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
+    axes[0].plot(history['train_loss'], label='Train Loss')
+    axes[0].plot(history['val_loss'], label='Val Loss')
+    axes[0].set_xlabel('Epoch')
+    axes[0].set_ylabel('Loss')
+    axes[0].set_title('Training and Validation Loss')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
     
-    axes[0, 1].plot(history['train_loss_arrows'], label='Train Loss (Arrows)', color='blue')
-    axes[0, 1].plot(history['val_loss_arrows'], label='Val Loss (Arrows)', color='cyan')
-    axes[0, 1].plot(history['train_loss_offset'], label='Train Loss (Offset)', color='red')
-    axes[0, 1].plot(history['val_loss_offset'], label='Val Loss (Offset)', color='orange')
-    axes[0, 1].set_xlabel('Epoch')
-    axes[0, 1].set_ylabel('Loss')
-    axes[0, 1].set_title('Individual Task Losses')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Accuracy plots
-    axes[1, 0].plot(history['val_exact_match'])
-    axes[1, 0].set_xlabel('Epoch')
-    axes[1, 0].set_ylabel('Exact Match Accuracy')
-    axes[1, 0].set_title('Validation Exact Match Accuracy (Arrows)')
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    axes[1, 1].plot(history['val_offset_mae'])
-    axes[1, 1].set_xlabel('Epoch')
-    axes[1, 1].set_ylabel('Mean Absolute Error (seconds)')
-    axes[1, 1].set_title('Validation Offset MAE')
-    axes[1, 1].grid(True, alpha=0.3)
+    # Accuracy plot
+    axes[1].plot(history['val_exact_match'])
+    axes[1].set_xlabel('Epoch')
+    axes[1].set_ylabel('Exact Match Accuracy')
+    axes[1].set_title('Validation Exact Match Accuracy')
+    axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.savefig('artifacts/training_history.png', dpi=150, bbox_inches='tight')
@@ -932,7 +788,7 @@ def main():
     print("\n" + "="*70)
     print("STEP 4: EVALUATION ON TEST SET")
     print("="*70)
-    metrics = evaluate_cnn_model(model, X_test, Y_test, offsets_test)
+    metrics = evaluate_cnn_model(model, X_test, Y_test)
     print_results(metrics, Y_train)
     
     # Save model
@@ -951,7 +807,6 @@ def main():
     viz_indices = np.random.choice(len(X_test), size=num_viz, replace=False)
     
     visualize_predictions(X_test, Y_test, metrics['Y_pred'], 
-                         offsets_test, metrics['offset_pred'],
                          viz_indices, output_dir='artifacts')
     
     print("\n" + "="*70)
@@ -961,12 +816,12 @@ def main():
     print(f"✓ Training history saved to: artifacts/training_history.png")
     print(f"✓ Sample predictions saved to: artifacts/prediction_sample_*.png")
     print("\n" + "="*70)
-    print("KEY ACHIEVEMENT: Model now predicts BOTH arrows AND offsets!")
+    print("KEY CHANGES: Removed offset prediction for simpler classification!")
     print("="*70)
-    print("\nThis enables real-world inference on arbitrary sensor windows:")
-    print("  • Predicts which arrows to press (classification)")
-    print("  • Predicts when to press them (regression)")
-    print("  • Addresses the limitation mentioned in README")
+    print("\nNew approach:")
+    print("  • 50ms threshold: arrows within 50ms → labeled, else 'nothing'")
+    print("  • Model learns when to predict and when not to predict")
+    print("  • Cleaner classification task without regression complexity")
     print("="*70)
 
 

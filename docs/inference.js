@@ -81,7 +81,7 @@ class InferenceEngine {
                 
                 if (result && result.arrows.some(a => a === 1)) {
                     predictions.push({
-                        time: windowStart + this.windowSize / 2 + result.offset,
+                        time: windowStart + this.windowSize / 2,
                         arrows: result.arrows,
                         confidence: result.confidence
                     });
@@ -200,7 +200,7 @@ class InferenceEngine {
     /**
      * Run ONNX inference on a window
      * @param {Float32Array} windowData - Window data [numChannels x seqLength]
-     * @returns {Promise<Object>} Prediction result {arrows, offset, confidence}
+     * @returns {Promise<Object>} Prediction result {arrows, confidence}
      */
     async runInference(windowData) {
         try {
@@ -213,16 +213,12 @@ class InferenceEngine {
             
             // Get outputs
             const arrowsOutput = results.arrows.data; // [1, 4]
-            const offsetOutput = results.offset.data; // [1, 1]
             
             // Apply sigmoid to arrows (probabilities)
             const arrows = Array.from(arrowsOutput).map(x => this.sigmoid(x));
             
             // Threshold arrows
             const arrowsBinary = arrows.map(x => x > this.confidenceThreshold ? 1 : 0);
-            
-            // Get offset (time adjustment)
-            const offset = offsetOutput[0];
             
             // Calculate confidence (average probability of predicted arrows)
             const activeArrows = arrows.filter((_, i) => arrowsBinary[i] === 1);
@@ -232,7 +228,6 @@ class InferenceEngine {
             
             return {
                 arrows: arrowsBinary,
-                offset: offset,
                 confidence: confidence
             };
         } catch (error) {

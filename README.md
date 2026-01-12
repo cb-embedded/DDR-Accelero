@@ -105,4 +105,4 @@ Biomechanical approach using:
 - Exponential decay kernel (tau=0.1s) modeling body dynamics
 - FFT-based correlation for alignment
 - Bandpass filter (0.5-8 Hz) for human movement frequencies
-- CNN with multi-task learning for arrow and timing prediction
+- CNN for arrow classification with 50ms threshold for "nothing" state

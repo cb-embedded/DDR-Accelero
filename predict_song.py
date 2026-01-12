@@ -111,16 +111,15 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
             X = torch.FloatTensor(sensor_window).unsqueeze(0).permute(0, 2, 1).to(device)
             
             # Make prediction
-            arrows_out, offset_out = model(X)
+            arrows_out = model(X)
             
             # Convert to binary arrows (threshold at 0.5)
             pred_arrows = (arrows_out[0] > 0.5).float().cpu().numpy().astype(int)
-            pred_offset = offset_out[0, 0].cpu().numpy()
             
             # Only add prediction if at least one arrow is predicted
             if pred_arrows.sum() > 0:
                 # Convert sensor time back to chart time
-                chart_time = pred_time - offset + pred_offset  # Include predicted offset
+                chart_time = pred_time - offset
                 # Make relative to window start
                 relative_time = chart_time - start_time
                 
@@ -128,8 +127,7 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
                 if 0 <= relative_time <= duration:
                     predictions.append({
                         'time': relative_time,
-                        'arrows': pred_arrows.tolist(),
-                        'offset': pred_offset
+                        'arrows': pred_arrows.tolist()
                     })
     
     print(f"  Generated {len(predictions)} predictions")
@@ -219,15 +217,6 @@ def main():
     print(f"  Original arrows: {len(ground_truth)}")
     print(f"  Predicted arrows: {len(predictions)}")
     print(f"  Detection rate: {len(predictions)}/{len(ground_truth)} ({100*len(predictions)/max(1,len(ground_truth)):.1f}%)")
-    
-    # Print statistics about filtered predictions
-    if predictions:
-        offsets = [p['offset'] for p in predictions]
-        print(f"\n  Prediction offset stats:")
-        print(f"    Mean: {np.mean(offsets):.3f}s")
-        print(f"    Std: {np.std(offsets):.3f}s")
-        print(f"    Min: {np.min(offsets):.3f}s")
-        print(f"    Max: {np.max(offsets):.3f}s")
     
     print("\n" + "="*70)
     print("The figure shows:")
