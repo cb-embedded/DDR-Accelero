@@ -53,6 +53,8 @@ python predict_song.py \
 ```
 
 Arguments: `<capture_zip> <sm_file> <diff_level> [start_time] [duration]`
+- `start_time`: Start time in seconds for prediction window (default: 70.0)
+- `duration`: Duration of prediction window in seconds (default: 10.0)
 
 ### Visualization
 

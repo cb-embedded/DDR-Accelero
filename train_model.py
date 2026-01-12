@@ -34,7 +34,10 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
     Load multiple captures and create unified dataset.
     
     Args:
-        capture_configs: List of tuples (capture_path, sm_path, diff_level, diff_type)
+        capture_configs: List of tuples (capture_path, sm_path, diff_level[, diff_type])
+                        For backward compatibility, diff_type is optional and defaults to 'medium'.
+                        - 3-tuple format: (capture_path, sm_path, diff_level)
+                        - 4-tuple format: (capture_path, sm_path, diff_level, diff_type)
         window_size: Window size for samples (default 1.0s)
     
     Returns:
@@ -46,11 +49,13 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
     all_Y = []
     all_offsets = []
     
+    DEFAULT_DIFFICULTY_TYPE = 'medium'
+    
     for i, config in enumerate(capture_configs):
         # Support both old format (3 args) and new format (4 args)
         if len(config) == 3:
             capture_path, sm_path, diff_level = config
-            diff_type = 'medium'
+            diff_type = DEFAULT_DIFFICULTY_TYPE
         else:
             capture_path, sm_path, diff_level, diff_type = config
         
@@ -802,6 +807,9 @@ PREDICTION RESULTS:
 
 
 def main():
+    DEFAULT_DIFFICULTY_TYPE = 'medium'
+    VALID_DIFFICULTY_TYPES = ['easy', 'medium', 'hard']
+    
     if len(sys.argv) < 2:
         print(__doc__)
         print("\nUsage: python train_model.py <capture1_zip> <sm1_file> <diff1_level> [diff1_type] [<capture2_zip> <sm2_file> <diff2_level> [diff2_type] ...]")
@@ -826,11 +834,11 @@ def main():
         diff_level = int(args[i+2])
         
         # Check if next argument is difficulty type or next capture
-        if i + 3 < len(args) and args[i+3].lower() in ['easy', 'medium', 'hard']:
+        if i + 3 < len(args) and args[i+3].lower() in VALID_DIFFICULTY_TYPES:
             diff_type = args[i+3].lower()
             i += 4
         else:
-            diff_type = 'medium'  # default
+            diff_type = DEFAULT_DIFFICULTY_TYPE
             i += 3
         
         capture_configs.append((capture, sm_file, diff_level, diff_type))
