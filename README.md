@@ -47,10 +47,12 @@ Output: `artifacts/trained_model.pth`, `artifacts/training_history.png`, `artifa
 Generate predictions for a song and compare with ground truth:
 
 ```bash
-python predict_song.py --model artifacts/trained_model.pth \
-  --capture "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" \
-  --sm "sm_files/Lucky Orb.sm" --difficulty 5
+python predict_song.py \
+  "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" \
+  "sm_files/Lucky Orb.sm" 5 70.0 10.0
 ```
+
+Arguments: `<capture_zip> <sm_file> <diff_level> [start_time] [duration]`
 
 ### Visualization
 
