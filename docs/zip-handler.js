@@ -45,7 +45,8 @@ class ZipHandler {
 
         } catch (error) {
             console.error('Error loading ZIP file:', error);
-            throw new Error('Failed to load ZIP file: ' + error.message);
+            const errorMsg = error?.message || String(error) || 'Unknown error loading ZIP file';
+            throw new Error('Failed to load ZIP file: ' + errorMsg);
         }
     }
 
