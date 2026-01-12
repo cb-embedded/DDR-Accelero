@@ -27,10 +27,10 @@ Thumbs.db
 artifacts/*.pkl
 artifacts/*.pth
 !artifacts/trained_model.pth
-artifacts/prediction_sample_*.png
-artifacts/dataset_sample_*.png
-artifacts/training_history.png
-!artifacts/training_history.png
+# Keep a few sample visualizations for documentation
+artifacts/prediction_sample_0[6-9].png
+artifacts/prediction_sample_1[0-9].png
+artifacts/dataset_sample_0[5-9].png
 
 # Test scripts
 test_onnx_model.py
