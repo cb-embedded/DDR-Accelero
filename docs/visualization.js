@@ -19,7 +19,7 @@ class ArrowVisualizer {
     /**
      * Create visualization comparing predictions and ground truth
      * @param {Array} predictions - Predicted arrows
-     * @param {Array} groundTruth - Ground truth arrows from .sm file
+     * @param {Array} groundTruth - Ground truth arrows from .sm file (can be empty)
      * @param {number} duration - Duration to display
      */
     visualize(predictions, groundTruth, duration) {
@@ -40,9 +40,33 @@ class ArrowVisualizer {
         const predColumn = this.createColumn('ML Predictions', predictions, duration, '#667eea');
         vizContainer.appendChild(predColumn);
 
-        // Create ground truth column
-        const gtColumn = this.createColumn('Ground Truth (.sm)', groundTruth, duration, '#764ba2');
-        vizContainer.appendChild(gtColumn);
+        // Create ground truth column only if we have ground truth data
+        if (groundTruth && groundTruth.length > 0) {
+            const gtColumn = this.createColumn('Ground Truth (.sm)', groundTruth, duration, '#764ba2');
+            vizContainer.appendChild(gtColumn);
+        } else {
+            // Show a message if no ground truth is available
+            const noGtColumn = document.createElement('div');
+            noGtColumn.style.display = 'flex';
+            noGtColumn.style.flexDirection = 'column';
+            noGtColumn.style.alignItems = 'center';
+            noGtColumn.style.justifyContent = 'center';
+            noGtColumn.style.padding = '40px';
+            noGtColumn.style.background = '#f8f9fa';
+            noGtColumn.style.border = '2px dashed #ddd';
+            noGtColumn.style.borderRadius = '8px';
+            noGtColumn.style.minWidth = '300px';
+            
+            const message = document.createElement('div');
+            message.style.textAlign = 'center';
+            message.style.color = '#666';
+            message.innerHTML = `
+                <h3 style="margin-bottom: 10px;">No Ground Truth</h3>
+                <p>Upload a .sm file to see<br>comparison with actual chart</p>
+            `;
+            noGtColumn.appendChild(message);
+            vizContainer.appendChild(noGtColumn);
+        }
 
         this.container.appendChild(vizContainer);
     }

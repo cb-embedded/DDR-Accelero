@@ -27,12 +27,13 @@ class InferenceEngine {
             console.log('ONNX model loaded successfully');
         } catch (error) {
             console.error('Failed to load ONNX model:', error);
+            const errorMsg = error?.message || String(error) || 'Unknown error';
             throw new Error(
                 'Failed to load ONNX model. Please ensure:\n' +
                 '1. model.onnx and model.onnx.data files exist in the docs/ directory\n' +
                 '2. Files are accessible from the web server\n' +
                 '3. Run "python export_model_to_onnx.py" to generate the model\n' +
-                'Error: ' + error.message
+                'Error details: ' + errorMsg
             );
         }
     }
@@ -229,6 +230,8 @@ class InferenceEngine {
             };
         } catch (error) {
             console.error('Inference error:', error);
+            const errorMsg = error?.message || String(error) || 'Unknown inference error';
+            console.error('Detailed error:', errorMsg);
             return null;
         }
     }

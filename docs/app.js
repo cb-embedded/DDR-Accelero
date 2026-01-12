@@ -22,6 +22,36 @@ const app = {
     difficulty: 5
 };
 
+// Global error handler to catch all errors
+window.addEventListener('error', (event) => {
+    console.error('Uncaught error:', event.error);
+    displayGlobalError('Unexpected error: ' + (event.error?.message || event.error || 'Unknown error'));
+    event.preventDefault();
+});
+
+// Global unhandled promise rejection handler
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('Unhandled promise rejection:', event.reason);
+    displayGlobalError('Unexpected error: ' + (event.reason?.message || event.reason || 'Unknown error'));
+    event.preventDefault();
+});
+
+/**
+ * Display a global error message
+ */
+function displayGlobalError(message) {
+    // Try to display in progress div if available
+    const progressDiv = document.getElementById('progress');
+    if (progressDiv) {
+        progressDiv.textContent = '✗ ' + message;
+        progressDiv.className = 'status error';
+        progressDiv.style.display = 'block';
+    } else {
+        // Fallback: create alert-style message
+        alert('Error: ' + message);
+    }
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DDR Accelero Web App initialized');
@@ -44,6 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize inference engine
     app.inference.initialize().catch(err => {
         console.error('Failed to initialize inference:', err);
+        const errorMsg = err?.message || String(err) || 'Unknown error during initialization';
+        displayGlobalError('Failed to initialize inference: ' + errorMsg);
     });
 });
 
@@ -77,7 +109,8 @@ async function handleZipUpload(event) {
         
     } catch (error) {
         console.error('Error loading ZIP:', error);
-        statusDiv.textContent = '✗ Error: ' + error.message;
+        const errorMsg = error?.message || String(error) || 'Unknown error loading ZIP file';
+        statusDiv.textContent = '✗ Error: ' + errorMsg;
         statusDiv.className = 'status error';
         app.sensorData = null;
     }
@@ -113,7 +146,8 @@ async function handleSmUpload(event) {
         
     } catch (error) {
         console.error('Error loading SM file:', error);
-        statusDiv.textContent = '✗ Error: ' + error.message;
+        const errorMsg = error?.message || String(error) || 'Unknown error loading SM file';
+        statusDiv.textContent = '✗ Error: ' + errorMsg;
         statusDiv.className = 'status error';
         app.smData = null;
     }
@@ -124,7 +158,8 @@ async function handleSmUpload(event) {
  */
 function updatePredictButton() {
     const button = document.getElementById('predictButton');
-    const canPredict = app.sensorData !== null && app.smData !== null;
+    // Allow prediction with just ZIP file (SM file is now optional)
+    const canPredict = app.sensorData !== null;
     button.disabled = !canPredict;
 }
 
@@ -151,12 +186,17 @@ async function runInference() {
         const inferenceTime = performance.now() - startTime;
         console.log(`Inference completed in ${inferenceTime.toFixed(0)}ms`);
         
-        // Get ground truth arrows
-        const duration = Math.min(
-            app.zipHandler.getDuration(),
-            app.smParser.getTotalDuration()
-        );
-        app.groundTruth = app.smParser.getArrowsInWindow(0, duration);
+        // Get ground truth arrows if SM file is available
+        let duration = app.zipHandler.getDuration();
+        if (app.smData) {
+            duration = Math.min(
+                app.zipHandler.getDuration(),
+                app.smParser.getTotalDuration()
+            );
+            app.groundTruth = app.smParser.getArrowsInWindow(0, duration);
+        } else {
+            app.groundTruth = null;
+        }
         
         // Display results
         displayResults(duration, inferenceTime);
@@ -166,9 +206,10 @@ async function runInference() {
         
     } catch (error) {
         console.error('Error during inference:', error);
-        progressDiv.textContent = '✗ Error: ' + error.message;
+        const errorMsg = error?.message || String(error) || 'Unknown error during inference';
+        progressDiv.textContent = '✗ Error: ' + errorMsg;
         progressDiv.className = 'status error';
-        app.visualizer.showError('Failed to run inference: ' + error.message);
+        app.visualizer.showError('Failed to run inference: ' + errorMsg);
     }
 }
 
@@ -181,54 +222,80 @@ function displayResults(duration, inferenceTime) {
     
     // Calculate statistics
     const numPredictions = app.predictions.length;
-    const numGroundTruth = app.groundTruth.length;
-    const detectionRate = numGroundTruth > 0 
-        ? (numPredictions / numGroundTruth * 100).toFixed(1)
-        : 0;
     
-    // Calculate accuracy (approximate - matches within 0.5s window)
-    let matchedPredictions = 0;
-    for (const pred of app.predictions) {
-        const hasMatch = app.groundTruth.some(gt => 
-            Math.abs(gt.time - pred.time) < 0.5 &&
-            arraysEqual(gt.arrows, pred.arrows)
-        );
-        if (hasMatch) matchedPredictions++;
+    let statsHTML = '';
+    
+    if (app.groundTruth && app.groundTruth.length > 0) {
+        // With ground truth - show comparison metrics
+        const numGroundTruth = app.groundTruth.length;
+        const detectionRate = numGroundTruth > 0 
+            ? (numPredictions / numGroundTruth * 100).toFixed(1)
+            : 0;
+        
+        // Calculate accuracy (approximate - matches within 0.5s window)
+        let matchedPredictions = 0;
+        for (const pred of app.predictions) {
+            const hasMatch = app.groundTruth.some(gt => 
+                Math.abs(gt.time - pred.time) < 0.5 &&
+                arraysEqual(gt.arrows, pred.arrows)
+            );
+            if (hasMatch) matchedPredictions++;
+        }
+        const accuracy = numPredictions > 0
+            ? (matchedPredictions / numPredictions * 100).toFixed(1)
+            : 0;
+        
+        statsHTML = `
+            <div class="stat-card">
+                <h4>Duration</h4>
+                <div class="value">${duration.toFixed(1)}s</div>
+            </div>
+            <div class="stat-card">
+                <h4>Ground Truth</h4>
+                <div class="value">${numGroundTruth}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Predictions</h4>
+                <div class="value">${numPredictions}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Detection Rate</h4>
+                <div class="value">${detectionRate}%</div>
+            </div>
+            <div class="stat-card">
+                <h4>Approximate Accuracy</h4>
+                <div class="value">${accuracy}%</div>
+            </div>
+            <div class="stat-card">
+                <h4>Inference Time</h4>
+                <div class="value">${inferenceTime.toFixed(0)}ms</div>
+            </div>
+        `;
+    } else {
+        // Without ground truth - show only prediction metrics
+        statsHTML = `
+            <div class="stat-card">
+                <h4>Duration</h4>
+                <div class="value">${duration.toFixed(1)}s</div>
+            </div>
+            <div class="stat-card">
+                <h4>Predictions</h4>
+                <div class="value">${numPredictions}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Inference Time</h4>
+                <div class="value">${inferenceTime.toFixed(0)}ms</div>
+            </div>
+            <div class="info-message" style="grid-column: 1 / -1; padding: 15px; background: #fff3cd; border-radius: 8px; color: #856404; text-align: center;">
+                <strong>Note:</strong> Upload a .sm file to see accuracy metrics and ground truth comparison
+            </div>
+        `;
     }
-    const accuracy = numPredictions > 0
-        ? (matchedPredictions / numPredictions * 100).toFixed(1)
-        : 0;
     
-    // Display stats
-    statsDiv.innerHTML = `
-        <div class="stat-card">
-            <h4>Duration</h4>
-            <div class="value">${duration.toFixed(1)}s</div>
-        </div>
-        <div class="stat-card">
-            <h4>Ground Truth</h4>
-            <div class="value">${numGroundTruth}</div>
-        </div>
-        <div class="stat-card">
-            <h4>Predictions</h4>
-            <div class="value">${numPredictions}</div>
-        </div>
-        <div class="stat-card">
-            <h4>Detection Rate</h4>
-            <div class="value">${detectionRate}%</div>
-        </div>
-        <div class="stat-card">
-            <h4>Approximate Accuracy</h4>
-            <div class="value">${accuracy}%</div>
-        </div>
-        <div class="stat-card">
-            <h4>Inference Time</h4>
-            <div class="value">${inferenceTime.toFixed(0)}ms</div>
-        </div>
-    `;
+    statsDiv.innerHTML = statsHTML;
     
     // Create visualization
-    app.visualizer.visualize(app.predictions, app.groundTruth, duration);
+    app.visualizer.visualize(app.predictions, app.groundTruth || [], duration);
     
     // Show results section
     resultsSection.style.display = 'block';
