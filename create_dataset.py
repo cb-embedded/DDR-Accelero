@@ -114,10 +114,12 @@ def parse_sm_file(sm_path, diff_level, diff_type='medium'):
 
 def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0, num_windows=None):
     """
-    Create dataset with X (sensor windows) and Y (arrow labels + offset).
+    Create dataset with X (sensor windows) and Y (arrow labels).
     
-    Windows are randomly sampled from the sensor data, and each window is labeled
-    with the closest arrow combination and its offset from the window center.
+    Windows are randomly sampled from the sensor data. Each window is labeled based on
+    whether the closest arrow is within 50ms of the window center:
+    - If closest arrow is ≤ 50ms away: label with that arrow combination
+    - If closest arrow is > 50ms away: label as [0,0,0,0] (nothing pressed)
     
     Args:
         t_sensor: Time array for sensor data
@@ -130,8 +132,7 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
     
     Returns:
         X: Array of sensor windows [N x window_samples x 9]
-        Y: Array of arrow labels [N x 4] (closest arrow to window center)
-        offsets: Array of time offsets [N] (offset of closest arrow from window center)
+        Y: Array of arrow labels [N x 4] (arrow combination or [0,0,0,0] if nothing)
         t_centers: Center time of each window
     """
     dt = t_sensor[1] - t_sensor[0]
@@ -146,7 +147,6 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
     
     X = []
     Y = []
-    offsets = []
     t_centers = []
     
     # Define valid range for window centers (must have enough space on both sides)
@@ -156,6 +156,9 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
     # Generate random window centers
     np.random.seed(42)  # For reproducibility
     random_centers = np.random.uniform(t_min, t_max, num_windows)
+    
+    # Threshold for considering an arrow as "pressed" at window center
+    OFFSET_THRESHOLD = 0.050  # 50ms
     
     for t_center in random_centers:
         # Find center index in sensor data
@@ -168,10 +171,11 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
         # Find closest arrow to this window center
         distances = np.abs(t_arrows_aligned - t_center)
         closest_idx = np.argmin(distances)
-        closest_offset = t_arrows_aligned[closest_idx] - t_center
+        closest_offset = abs(t_arrows_aligned[closest_idx] - t_center)
         
         # Only include window if closest arrow is within reasonable range (e.g., 3 seconds)
-        if abs(closest_offset) > 3.0:
+        # This prevents creating samples in areas with no musical activity
+        if closest_offset > 3.0:
             continue
         
         # Extract window for all 9 channels
@@ -182,14 +186,21 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
             window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
         
         X.append(np.array(window).T)  # Shape: [window_samples*2, 9]
-        Y.append(arrows[closest_idx])
-        offsets.append(closest_offset)
+        
+        # Label based on 50ms threshold
+        if closest_offset <= OFFSET_THRESHOLD:
+            # Close enough to arrow event - label with arrow combination
+            Y.append(arrows[closest_idx])
+        else:
+            # Too far from any arrow - label as "nothing pressed"
+            Y.append(np.array([0, 0, 0, 0]))
+        
         t_centers.append(t_center)
     
-    return np.array(X), np.array(Y), np.array(offsets), np.array(t_centers)
+    return np.array(X), np.array(Y), np.array(t_centers)
 
 
-def visualize_sample(idx, X_sample, Y_sample, arrow_offset, t_center, t_arrows, arrows, 
+def visualize_sample(idx, X_sample, Y_sample, t_center, t_arrows, arrows, 
                      window_size=1.0, dt=0.01, output_path=None):
     """
     Visualize a single sample with sensor data and arrow chronogram.
@@ -197,8 +208,7 @@ def visualize_sample(idx, X_sample, Y_sample, arrow_offset, t_center, t_arrows, 
     Args:
         idx: Sample index
         X_sample: Sensor data window [window_samples x 9]
-        Y_sample: Arrow label [4] (closest arrow to window center)
-        arrow_offset: Time offset of closest arrow from window center (in seconds)
+        Y_sample: Arrow label [4] (arrow combination or [0,0,0,0] if nothing)
         t_center: Center time of this sample
         t_arrows: All arrow times
         arrows: All arrow labels
@@ -228,7 +238,6 @@ def visualize_sample(idx, X_sample, Y_sample, arrow_offset, t_center, t_arrows, 
         ax.set_xlabel('Time (s)', fontsize=8)
         ax.grid(True, alpha=0.3)
         ax.axvline(0, color='b', linestyle='--', linewidth=1.5, alpha=0.7, label='Window center')
-        ax.axvline(arrow_offset, color='r', linestyle='--', linewidth=1.5, alpha=0.7, label='Label arrow')
     
     # Plot arrow chronograms - one line per arrow type
     ax_chrono = fig.add_subplot(gs[4:, :])
@@ -245,6 +254,9 @@ def visualize_sample(idx, X_sample, Y_sample, arrow_offset, t_center, t_arrows, 
     t_min_plot = t_center - window_size * 2
     t_max_plot = t_center + window_size * 2
     
+    # Threshold for marking label arrows
+    OFFSET_THRESHOLD = 0.050  # 50ms
+    
     for arrow_idx, arrow_name in enumerate(arrow_names):
         y_pos = y_positions[arrow_idx]
         
@@ -255,21 +267,26 @@ def visualize_sample(idx, X_sample, Y_sample, arrow_offset, t_center, t_arrows, 
         for j, t_arr in enumerate(t_arrows):
             if t_min_plot <= t_arr <= t_max_plot and arrows[j][arrow_idx] == 1:
                 t_rel = t_arr - t_center
-                # Use different style for label vs other arrows
-                if abs(t_rel - arrow_offset) < 0.001:  # This is the label arrow
+                # Check if this arrow is within threshold of window center and matches label
+                is_label = (abs(t_rel) <= OFFSET_THRESHOLD and Y_sample[arrow_idx] == 1)
+                
+                if is_label:
+                    # This is a label arrow
                     ax_chrono.plot(t_rel, y_pos, marker=markers[arrow_idx], 
                                   color=colors[arrow_idx], markersize=marker_sizes[arrow_idx]*2,
                                   markeredgewidth=2.5, markeredgecolor='black',
                                   label=f'{arrow_name} (LABEL)', zorder=10)
                 else:
+                    # Other arrows in vicinity
                     ax_chrono.plot(t_rel, y_pos, marker=markers[arrow_idx], 
                                   color=colors[arrow_idx], markersize=marker_sizes[arrow_idx],
                                   alpha=0.6, markeredgewidth=0.5, markeredgecolor='black')
     
     # Add vertical line at center (t=0)
     ax_chrono.axvline(0, color='blue', linestyle='--', linewidth=2, alpha=0.7, label='Window center (t=0)')
-    # Add vertical line at label arrow
-    ax_chrono.axvline(arrow_offset, color='red', linestyle='--', linewidth=2, alpha=0.7, label=f'Label arrow (t={arrow_offset:.3f}s)')
+    
+    # Add shaded region for 50ms threshold
+    ax_chrono.axvspan(-OFFSET_THRESHOLD, OFFSET_THRESHOLD, color='green', alpha=0.1, label='±50ms threshold')
     
     ax_chrono.set_xlim([-window_size, window_size])
     ax_chrono.set_ylim([-0.5, 3.5])
@@ -283,7 +300,10 @@ def visualize_sample(idx, X_sample, Y_sample, arrow_offset, t_center, t_arrows, 
     
     # Add text with label info
     label_str = '+'.join([arrow_names[i] for i, v in enumerate(Y_sample) if v == 1])
-    fig.suptitle(f'Sample #{idx} - Label: {label_str} (offset: {arrow_offset:.3f}s from center)', 
+    if not label_str:
+        label_str = 'Nothing (no arrows pressed)'
+    
+    fig.suptitle(f'Sample #{idx} - Label: {label_str}', 
                  fontsize=14, fontweight='bold')
     
     plt.tight_layout()
@@ -331,11 +351,16 @@ def main():
     
     # Create dataset
     print("\n[4/5] Creating dataset...")
-    X, Y, arrow_offsets, t_centers = create_dataset(t_sensor, sensors, t_arrows, arrows, offset)
+    X, Y, t_centers = create_dataset(t_sensor, sensors, t_arrows, arrows, offset)
     print(f"  Dataset size: {len(X)} samples")
     print(f"  X shape: {X.shape} (samples x window_length x 9_channels)")
     print(f"  Y shape: {Y.shape} (samples x 4_arrows)")
-    print(f"  Arrow offsets range: [{arrow_offsets.min():.3f}, {arrow_offsets.max():.3f}]s")
+    
+    # Count "nothing" vs arrow samples
+    num_nothing = np.sum(np.all(Y == 0, axis=1))
+    num_arrows = len(Y) - num_nothing
+    print(f"  Samples with arrows: {num_arrows} ({num_arrows/len(Y)*100:.1f}%)")
+    print(f"  Samples with nothing: {num_nothing} ({num_nothing/len(Y)*100:.1f}%)")
     
     # Generate visualizations
     print(f"\n[5/5] Generating {num_samples} sample visualizations...")
@@ -354,7 +379,7 @@ def main():
     
     for i, idx in enumerate(indices):
         output_path = out_dir / f'dataset_sample_{i:02d}.png'
-        visualize_sample(i, X[idx], Y[idx], arrow_offsets[idx], t_centers[idx], 
+        visualize_sample(i, X[idx], Y[idx], t_centers[idx], 
                         t_arrows_aligned, arrows, 
                         output_path=output_path)
     
