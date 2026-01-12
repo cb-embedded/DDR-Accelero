@@ -61,10 +61,9 @@ def export_to_onnx(model_path, output_path, seq_length=198):
     # Test forward pass
     print("\n[3/4] Testing forward pass...")
     with torch.no_grad():
-        arrows_out, offset_out = model(dummy_input)
+        arrows_out = model(dummy_input)
         print(f"  ✓ Forward pass successful")
         print(f"  - Arrows output shape: {arrows_out.shape}")
-        print(f"  - Offset output shape: {offset_out.shape}")
     
     # Export to ONNX
     print(f"\n[4/4] Exporting to ONNX format: {output_path}")
@@ -80,11 +79,10 @@ def export_to_onnx(model_path, output_path, seq_length=198):
         opset_version=11,               # ONNX opset version
         do_constant_folding=True,       # Optimize constant folding
         input_names=['input'],          # Input tensor name
-        output_names=['arrows', 'offset'],  # Output tensor names
+        output_names=['arrows'],        # Output tensor name
         dynamic_axes={
             'input': {0: 'batch_size'},     # Variable batch size
-            'arrows': {0: 'batch_size'},
-            'offset': {0: 'batch_size'}
+            'arrows': {0: 'batch_size'}
         }
     )
     
