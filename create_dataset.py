@@ -112,7 +112,37 @@ def parse_sm_file(sm_path, diff_level, diff_type='medium'):
     return np.array(times), np.array(arrows), bpm
 
 
-def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0, num_windows=None, balance_classes=True):
+def apply_augmentation(window, augment_prob=0.5):
+    """
+    Apply data augmentation to a sensor window.
+    
+    Args:
+        window: Sensor data [timesteps x 9]
+        augment_prob: Probability of applying augmentation
+        
+    Returns:
+        Augmented window
+    """
+    if np.random.random() > augment_prob:
+        return window
+    
+    aug_window = window.copy()
+    
+    # 1. Add Gaussian noise (small amount)
+    if np.random.random() < 0.7:
+        noise_level = 0.05  # 5% noise
+        noise = np.random.normal(0, noise_level, aug_window.shape)
+        aug_window = aug_window + noise
+    
+    # 2. Scale amplitude slightly (90-110%)
+    if np.random.random() < 0.5:
+        scale = np.random.uniform(0.9, 1.1)
+        aug_window = aug_window * scale
+    
+    return aug_window
+
+
+def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0, num_windows=None, balance_classes=True, augment_data=True):
     """
     Create dataset with X (sensor windows) and Y (arrow labels).
     
@@ -130,6 +160,7 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
         window_size: Half-window size in seconds (default 1.0s for total 2s window)
         num_windows: Number of random windows to generate (default: 2x number of arrows)
         balance_classes: If True, balance "arrow" vs "nothing" samples (default: True)
+        augment_data: If True, apply data augmentation (default: True)
     
     Returns:
         X: Array of sensor windows [N x window_samples x 9]
@@ -165,8 +196,8 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
         np.random.seed(42)
         for arrow_time, arrow_label in zip(t_arrows_aligned, arrows):
             # Sample windows very close to each arrow (within 50ms)
-            # Generate 1-2 samples per arrow
-            for _ in range(2):
+            # Generate 3 samples per arrow (increased from 2 for more data)
+            for _ in range(3):
                 # Random offset within threshold
                 offset_noise = np.random.uniform(-OFFSET_THRESHOLD, OFFSET_THRESHOLD)
                 t_center = arrow_time + offset_noise
@@ -186,7 +217,13 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
                                'mag_x', 'mag_y', 'mag_z']:
                     window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
                 
-                X_arrows.append(np.array(window).T)
+                window_array = np.array(window).T  # [timesteps x 9]
+                
+                # Apply augmentation if enabled
+                if augment_data:
+                    window_array = apply_augmentation(window_array)
+                
+                X_arrows.append(window_array)
                 Y_arrows.append(arrow_label)
                 t_centers_arrows.append(t_center)
         
@@ -217,7 +254,13 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
                                'mag_x', 'mag_y', 'mag_z']:
                     window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
                 
-                X_nothing.append(np.array(window).T)
+                window_array = np.array(window).T
+                
+                # Apply augmentation if enabled (less aggressive for "nothing")
+                if augment_data:
+                    window_array = apply_augmentation(window_array, augment_prob=0.3)
+                
+                X_nothing.append(window_array)
                 Y_nothing.append(np.array([0, 0, 0, 0]))
                 t_centers_nothing.append(t_center)
         
