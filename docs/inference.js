@@ -21,7 +21,12 @@ class InferenceEngine {
         console.log('Initializing inference engine...');
         
         try {
+            // Configure ONNX Runtime Web environment
+            // Set WASM paths to the lib directory where we placed the WASM files
+            ort.env.wasm.wasmPaths = 'lib/';
+            
             // Load ONNX model
+            // The model uses external data format, so model.onnx.data must be accessible
             this.session = await ort.InferenceSession.create('model.onnx');
             this.isModelLoaded = true;
             console.log('ONNX model loaded successfully');
