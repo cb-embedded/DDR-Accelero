@@ -22,19 +22,12 @@ const app = {
     difficulty: 5
 };
 
-// Global error handler to catch all errors
-window.addEventListener('error', (event) => {
-    console.error('Uncaught error:', event.error);
-    displayGlobalError('Unexpected error: ' + (event.error?.message || event.error || 'Unknown error'));
-    event.preventDefault();
-});
-
-// Global unhandled promise rejection handler
-window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason);
-    displayGlobalError('Unexpected error: ' + (event.reason?.message || event.reason || 'Unknown error'));
-    event.preventDefault();
-});
+/**
+ * Format error message safely
+ */
+function formatErrorMessage(error) {
+    return error?.message || String(error) || 'Unknown error';
+}
 
 /**
  * Display a global error message
@@ -47,10 +40,24 @@ function displayGlobalError(message) {
         progressDiv.className = 'status error';
         progressDiv.style.display = 'block';
     } else {
-        // Fallback: create alert-style message
-        alert('Error: ' + message);
+        // Fallback: Log to console since no UI element is available
+        console.error('Error (no UI available):', message);
     }
 }
+
+// Global error handler to catch all errors
+window.addEventListener('error', (event) => {
+    console.error('Uncaught error:', event.error);
+    displayGlobalError('Unexpected error: ' + formatErrorMessage(event.error));
+    event.preventDefault();
+});
+
+// Global unhandled promise rejection handler
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('Unhandled promise rejection:', event.reason);
+    displayGlobalError('Unexpected error: ' + formatErrorMessage(event.reason));
+    event.preventDefault();
+});
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -74,8 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize inference engine
     app.inference.initialize().catch(err => {
         console.error('Failed to initialize inference:', err);
-        const errorMsg = err?.message || String(err) || 'Unknown error during initialization';
-        displayGlobalError('Failed to initialize inference: ' + errorMsg);
+        displayGlobalError('Failed to initialize inference: ' + formatErrorMessage(err));
     });
 });
 
@@ -109,8 +115,7 @@ async function handleZipUpload(event) {
         
     } catch (error) {
         console.error('Error loading ZIP:', error);
-        const errorMsg = error?.message || String(error) || 'Unknown error loading ZIP file';
-        statusDiv.textContent = '✗ Error: ' + errorMsg;
+        statusDiv.textContent = '✗ Error: ' + formatErrorMessage(error);
         statusDiv.className = 'status error';
         app.sensorData = null;
     }
@@ -146,8 +151,7 @@ async function handleSmUpload(event) {
         
     } catch (error) {
         console.error('Error loading SM file:', error);
-        const errorMsg = error?.message || String(error) || 'Unknown error loading SM file';
-        statusDiv.textContent = '✗ Error: ' + errorMsg;
+        statusDiv.textContent = '✗ Error: ' + formatErrorMessage(error);
         statusDiv.className = 'status error';
         app.smData = null;
     }
@@ -206,7 +210,7 @@ async function runInference() {
         
     } catch (error) {
         console.error('Error during inference:', error);
-        const errorMsg = error?.message || String(error) || 'Unknown error during inference';
+        const errorMsg = formatErrorMessage(error);
         progressDiv.textContent = '✗ Error: ' + errorMsg;
         progressDiv.className = 'status error';
         app.visualizer.showError('Failed to run inference: ' + errorMsg);
