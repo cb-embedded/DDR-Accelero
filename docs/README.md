@@ -73,4 +73,4 @@ If you see errors like "8493520" or "11855136", this typically means:
 If you see "Failed to resolve module specifier", ensure:
 1. All `.wasm` files are in the `lib/` directory
 2. The `ort.env.wasm.wasmPaths` is set to `'lib/'` in inference.js
-3. You're using ONNX Runtime Web 1.18.0 or earlier (later versions require ES modules)
+3. You're using a compatible version of ONNX Runtime Web (version 1.18.0 is recommended)

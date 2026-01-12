@@ -37,9 +37,9 @@ class InferenceEngine {
             const errorMsg = error?.message || String(error) || 'Unknown error';
             throw new Error(
                 'Failed to load ONNX model. Please ensure:\n' +
-                '1. model.onnx file exists in the docs/ directory\n' +
-                '2. Files are accessible from the web server\n' +
-                '3. ONNX Runtime Web libraries are in docs/lib/\n' +
+                '1. model.onnx file exists in the same directory as index.html\n' +
+                '2. ONNX Runtime Web libraries are in the lib/ subdirectory\n' +
+                '3. Files are accessible from the web server\n' +
                 'Error details: ' + errorMsg
             );
         }
