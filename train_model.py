@@ -72,9 +72,10 @@ def load_datasets_from_captures(capture_configs, window_size=1.0):
         result = align_capture(capture_path, sm_path, diff_level, diff_type=diff_type, verbose=False)
         offset = result['offset']
         
-        # Create dataset
-        print("  Creating dataset...")
-        X, Y, _ = create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=window_size)
+        # Create dataset with balanced classes
+        print("  Creating balanced dataset...")
+        X, Y, _ = create_dataset(t_sensor, sensors, t_arrows, arrows, offset, 
+                                 window_size=window_size, balance_classes=True)
         
         print(f"  Samples: {len(X)}")
         # Skip captures with no samples
@@ -193,8 +194,9 @@ def train_cnn_model(X_train, Y_train, X_val, Y_val, epochs=50, batch_size=32, lr
     model = ArrowCNN(input_channels=9, seq_length=X_train.shape[1])
     model = model.to(device)
     
-    # Loss function
-    criterion = nn.BCELoss()  # Binary Cross Entropy for multi-label classification
+    # Loss function - BCELoss for multi-label classification
+    # Note: Dataset is now balanced, so no need for class weights
+    criterion = nn.BCELoss()
     
     optimizer = optim.Adam(model.parameters(), lr=lr)
     

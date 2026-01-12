@@ -112,7 +112,7 @@ def parse_sm_file(sm_path, diff_level, diff_type='medium'):
     return np.array(times), np.array(arrows), bpm
 
 
-def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0, num_windows=None):
+def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0, num_windows=None, balance_classes=True):
     """
     Create dataset with X (sensor windows) and Y (arrow labels).
     
@@ -129,6 +129,7 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
         offset: Time offset from alignment (add to arrow times)
         window_size: Half-window size in seconds (default 1.0s for total 2s window)
         num_windows: Number of random windows to generate (default: 2x number of arrows)
+        balance_classes: If True, balance "arrow" vs "nothing" samples (default: True)
     
     Returns:
         X: Array of sensor windows [N x window_samples x 9]
@@ -141,61 +142,147 @@ def create_dataset(t_sensor, sensors, t_arrows, arrows, offset, window_size=1.0,
     # Align arrow times
     t_arrows_aligned = t_arrows + offset
     
-    # Default: generate 2x as many windows as arrows
-    if num_windows is None:
-        num_windows = len(t_arrows_aligned) * 2
-    
-    X = []
-    Y = []
-    t_centers = []
-    
-    # Define valid range for window centers (must have enough space on both sides)
-    t_min = t_sensor[0] + window_size
-    t_max = t_sensor[-1] - window_size
-    
-    # Generate random window centers
-    np.random.seed(42)  # For reproducibility
-    random_centers = np.random.uniform(t_min, t_max, num_windows)
-    
     # Threshold for considering an arrow as "pressed" at window center
     OFFSET_THRESHOLD = 0.050  # 50ms
     
-    for t_center in random_centers:
-        # Find center index in sensor data
-        center_idx = np.searchsorted(t_sensor, t_center)
+    if balance_classes:
+        # BALANCED SAMPLING APPROACH
+        # Generate equal numbers of "arrow" and "nothing" samples
         
-        # Check if window is within bounds
-        if center_idx - window_samples < 0 or center_idx + window_samples >= len(t_sensor):
-            continue
+        X_arrows = []
+        Y_arrows = []
+        t_centers_arrows = []
         
-        # Find closest arrow to this window center
-        distances = np.abs(t_arrows_aligned - t_center)
-        closest_idx = np.argmin(distances)
-        closest_offset = abs(t_arrows_aligned[closest_idx] - t_center)
+        X_nothing = []
+        Y_nothing = []
+        t_centers_nothing = []
         
-        # Only include window if closest arrow is within reasonable range (e.g., 3 seconds)
-        # This prevents creating samples in areas with no musical activity
-        if closest_offset > 3.0:
-            continue
+        # Define valid range for window centers
+        t_min = t_sensor[0] + window_size
+        t_max = t_sensor[-1] - window_size
         
-        # Extract window for all 9 channels
-        window = []
-        for channel in ['acc_x', 'acc_y', 'acc_z', 
-                       'gyro_x', 'gyro_y', 'gyro_z',
-                       'mag_x', 'mag_y', 'mag_z']:
-            window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
+        # 1. Generate "arrow" samples: center windows near actual arrows
+        np.random.seed(42)
+        for arrow_time, arrow_label in zip(t_arrows_aligned, arrows):
+            # Sample windows very close to each arrow (within 50ms)
+            # Generate 1-2 samples per arrow
+            for _ in range(2):
+                # Random offset within threshold
+                offset_noise = np.random.uniform(-OFFSET_THRESHOLD, OFFSET_THRESHOLD)
+                t_center = arrow_time + offset_noise
+                
+                # Check bounds
+                if t_center < t_min or t_center > t_max:
+                    continue
+                
+                center_idx = np.searchsorted(t_sensor, t_center)
+                if center_idx - window_samples < 0 or center_idx + window_samples >= len(t_sensor):
+                    continue
+                
+                # Extract window
+                window = []
+                for channel in ['acc_x', 'acc_y', 'acc_z', 
+                               'gyro_x', 'gyro_y', 'gyro_z',
+                               'mag_x', 'mag_y', 'mag_z']:
+                    window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
+                
+                X_arrows.append(np.array(window).T)
+                Y_arrows.append(arrow_label)
+                t_centers_arrows.append(t_center)
         
-        X.append(np.array(window).T)  # Shape: [window_samples*2, 9]
+        # 2. Generate "nothing" samples: center windows away from arrows
+        # Sample windows that are > 50ms from any arrow
+        num_nothing_samples = len(X_arrows)  # Match number of arrow samples
+        attempts = 0
+        max_attempts = num_nothing_samples * 10
         
-        # Label based on 50ms threshold
-        if closest_offset <= OFFSET_THRESHOLD:
-            # Close enough to arrow event - label with arrow combination
-            Y.append(arrows[closest_idx])
-        else:
-            # Too far from any arrow - label as "nothing pressed"
-            Y.append(np.array([0, 0, 0, 0]))
+        while len(X_nothing) < num_nothing_samples and attempts < max_attempts:
+            attempts += 1
+            t_center = np.random.uniform(t_min, t_max)
+            
+            # Find closest arrow
+            distances = np.abs(t_arrows_aligned - t_center)
+            closest_offset = np.min(distances)
+            
+            # Only keep if far from all arrows (> 50ms)
+            if closest_offset > OFFSET_THRESHOLD and closest_offset <= 3.0:
+                center_idx = np.searchsorted(t_sensor, t_center)
+                if center_idx - window_samples < 0 or center_idx + window_samples >= len(t_sensor):
+                    continue
+                
+                # Extract window
+                window = []
+                for channel in ['acc_x', 'acc_y', 'acc_z', 
+                               'gyro_x', 'gyro_y', 'gyro_z',
+                               'mag_x', 'mag_y', 'mag_z']:
+                    window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
+                
+                X_nothing.append(np.array(window).T)
+                Y_nothing.append(np.array([0, 0, 0, 0]))
+                t_centers_nothing.append(t_center)
         
-        t_centers.append(t_center)
+        # Combine arrow and nothing samples
+        X = X_arrows + X_nothing
+        Y = Y_arrows + Y_nothing
+        t_centers = t_centers_arrows + t_centers_nothing
+        
+        # Shuffle
+        indices = np.random.permutation(len(X))
+        X = [X[i] for i in indices]
+        Y = [Y[i] for i in indices]
+        t_centers = [t_centers[i] for i in indices]
+        
+    else:
+        # ORIGINAL RANDOM SAMPLING (UNBALANCED)
+        # Default: generate 2x as many windows as arrows
+        if num_windows is None:
+            num_windows = len(t_arrows_aligned) * 2
+        
+        X = []
+        Y = []
+        t_centers = []
+        
+        # Define valid range for window centers
+        t_min = t_sensor[0] + window_size
+        t_max = t_sensor[-1] - window_size
+        
+        # Generate random window centers
+        np.random.seed(42)
+        random_centers = np.random.uniform(t_min, t_max, num_windows)
+        
+        for t_center in random_centers:
+            # Find center index in sensor data
+            center_idx = np.searchsorted(t_sensor, t_center)
+            
+            # Check if window is within bounds
+            if center_idx - window_samples < 0 or center_idx + window_samples >= len(t_sensor):
+                continue
+            
+            # Find closest arrow to this window center
+            distances = np.abs(t_arrows_aligned - t_center)
+            closest_idx = np.argmin(distances)
+            closest_offset = abs(t_arrows_aligned[closest_idx] - t_center)
+            
+            # Only include window if closest arrow is within reasonable range
+            if closest_offset > 3.0:
+                continue
+            
+            # Extract window for all 9 channels
+            window = []
+            for channel in ['acc_x', 'acc_y', 'acc_z', 
+                           'gyro_x', 'gyro_y', 'gyro_z',
+                           'mag_x', 'mag_y', 'mag_z']:
+                window.append(sensors[channel][center_idx - window_samples:center_idx + window_samples])
+            
+            X.append(np.array(window).T)
+            
+            # Label based on 50ms threshold
+            if closest_offset <= OFFSET_THRESHOLD:
+                Y.append(arrows[closest_idx])
+            else:
+                Y.append(np.array([0, 0, 0, 0]))
+            
+            t_centers.append(t_center)
     
     return np.array(X), np.array(Y), np.array(t_centers)
 
