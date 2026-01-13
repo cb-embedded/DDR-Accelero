@@ -1,124 +1,95 @@
 #!/usr/bin/env python3
 """
-Export trained PyTorch model to ONNX format.
+Export trained Keras model to ONNX format.
 
-This script converts the trained ArrowCNN model to ONNX format.
+This script converts the trained Keras model to ONNX format.
+Note: Requires tf2onnx package (pip install tf2onnx)
 
 Usage:
     python -m utils.export_onnx [--model-path PATH] [--output PATH]
 
 Example:
-    python -m utils.export_onnx --model-path artifacts/trained_model.pth --output docs/model.onnx
+    python -m utils.export_onnx --model-path artifacts/trained_model.h5 --output docs/model.onnx
 """
 
 import argparse
 import sys
 from pathlib import Path
-import torch
-import torch.onnx
 
-# Import model architecture
-from train_model import ArrowCNN
+try:
+    import tf2onnx
+    import tensorflow as tf
+    from tensorflow import keras
+except ImportError:
+    print("Error: tf2onnx is required for ONNX export")
+    print("Install with: pip install tf2onnx")
+    sys.exit(1)
 
 
-def export_to_onnx(model_path, output_path, seq_length=198):
+def export_to_onnx(model_path, output_path):
     """
-    Export PyTorch model to ONNX format.
+    Export Keras model to ONNX format.
     
     Args:
-        model_path: Path to trained PyTorch model (.pth file)
+        model_path: Path to trained Keras model (.h5 file)
         output_path: Path to save ONNX model (.onnx file)
-        seq_length: Expected sequence length (default: 198)
     """
     print("="*70)
-    print("EXPORT PYTORCH MODEL TO ONNX")
+    print("EXPORT KERAS MODEL TO ONNX")
     print("="*70)
     
     # Load trained model
-    print(f"\n[1/4] Loading trained model from: {model_path}")
+    print(f"\n[1/3] Loading trained model from: {model_path}")
     
     if not Path(model_path).exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
     
-    checkpoint = torch.load(model_path, map_location='cpu')
-    
-    # Initialize model
-    model = ArrowCNN(input_channels=9, seq_length=seq_length)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-    
+    model = keras.models.load_model(model_path)
     print("  ✓ Model loaded successfully")
-    print(f"  - Architecture: ArrowCNN")
-    print(f"  - Input channels: 9")
-    print(f"  - Sequence length: {seq_length}")
-    
-    # Create dummy input for tracing
-    print("\n[2/4] Creating dummy input for model tracing...")
-    dummy_input = torch.randn(1, 9, seq_length)
-    print(f"  - Input shape: {dummy_input.shape} (batch_size, channels, time_steps)")
+    print(f"  - Input shape: {model.input_shape}")
+    print(f"  - Output shape: {model.output_shape}")
     
     # Test forward pass
-    print("\n[3/4] Testing forward pass...")
-    with torch.no_grad():
-        arrows_out = model(dummy_input)
-        print(f"  ✓ Forward pass successful")
-        print(f"  - Arrows output shape: {arrows_out.shape}")
+    print("\n[2/3] Testing forward pass...")
+    import numpy as np
+    dummy_input = np.random.randn(1, 198, 9).astype(np.float32)
+    output = model.predict(dummy_input, verbose=0)
+    print(f"  ✓ Forward pass successful")
+    print(f"  - Output shape: {output.shape}")
     
     # Export to ONNX
-    print(f"\n[4/4] Exporting to ONNX format: {output_path}")
+    print(f"\n[3/3] Exporting to ONNX format: {output_path}")
     
     # Create output directory if it doesn't exist
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
-    torch.onnx.export(
-        model,                          # Model to export
-        dummy_input,                    # Example input
-        output_path,                    # Output file path
-        export_params=True,             # Store trained parameters
-        opset_version=11,               # ONNX opset version
-        do_constant_folding=True,       # Optimize constant folding
-        input_names=['input'],          # Input tensor name
-        output_names=['arrows'],        # Output tensor name
-        dynamic_axes={
-            'input': {0: 'batch_size'},     # Variable batch size
-            'arrows': {0: 'batch_size'}
-        }
-    )
+    # Convert using tf2onnx
+    spec = (tf.TensorSpec((None, 198, 9), tf.float32, name="input"),)
+    model_proto, _ = tf2onnx.convert.from_keras(model, input_signature=spec, opset=13)
     
-    print(f"  ✓ Model exported successfully")
-    print(f"  - File size: {Path(output_path).stat().st_size / 1024:.1f} KB")
+    # Save ONNX model
+    with open(output_path, "wb") as f:
+        f.write(model_proto.SerializeToString())
     
-    # Verify ONNX model
-    print("\n[Verification] Loading ONNX model for verification...")
-    try:
-        import onnx
-        onnx_model = onnx.load(output_path)
-        onnx.checker.check_model(onnx_model)
-        print("  ✓ ONNX model is valid")
-        
-        # Print model info
-        print("\n[Model Info]")
-        print(f"  - Producer: {onnx_model.producer_name}")
-        print(f"  - IR version: {onnx_model.ir_version}")
-        print(f"  - Opset version: {onnx_model.opset_import[0].version}")
-        
-    except ImportError:
-        print("  ⚠ onnx package not installed, skipping verification")
-        print("    Install with: pip install onnx")
+    print(f"  ✓ ONNX model saved successfully")
+    
+    # Get file size
+    size_mb = Path(output_path).stat().st_size / (1024 * 1024)
+    print(f"  - File size: {size_mb:.2f} MB")
     
     print("\n" + "="*70)
     print("EXPORT COMPLETE")
     print("="*70)
-    print(f"\nNext steps:")
-    print(f"1. Copy {output_path} to your web server or CDN")
-    print(f"2. Update inference.js to load the ONNX model")
-    print(f"3. Test in browser with real sensor data")
-    print("="*70)
+    print(f"\n✓ ONNX model saved to: {output_path}")
+    print("\nYou can now use this model with ONNX Runtime:")
+    print("  import onnxruntime as ort")
+    print(f"  session = ort.InferenceSession('{output_path}')")
+    print("  output = session.run(None, {'input': input_data})")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Export PyTorch model to ONNX format',
+        description='Export Keras model to ONNX format',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -126,18 +97,15 @@ Examples:
   python -m utils.export_onnx
 
   # Export with custom paths
-  python -m utils.export_onnx --model-path my_model.pth --output docs/model.onnx
-  
-  # Export with custom sequence length
-  python -m utils.export_onnx --seq-length 256
+  python -m utils.export_onnx --model-path my_model.h5 --output docs/model.onnx
         """
     )
     
     parser.add_argument(
         '--model-path',
         type=str,
-        default='artifacts/trained_model.pth',
-        help='Path to trained PyTorch model (default: artifacts/trained_model.pth)'
+        default='artifacts/trained_model.h5',
+        help='Path to trained Keras model (default: artifacts/trained_model.h5)'
     )
     
     parser.add_argument(
@@ -147,19 +115,12 @@ Examples:
         help='Path to save ONNX model (default: docs/model.onnx)'
     )
     
-    parser.add_argument(
-        '--seq-length',
-        type=int,
-        default=198,
-        help='Expected sequence length (default: 198)'
-    )
-    
     args = parser.parse_args()
     
     try:
-        export_to_onnx(args.model_path, args.output, args.seq_length)
+        export_to_onnx(args.model_path, args.output)
     except Exception as e:
-        print(f"\n✗ Error: {e}", file=sys.stderr)
+        print(f"\n❌ Error during export: {str(e)}")
         sys.exit(1)
 
 

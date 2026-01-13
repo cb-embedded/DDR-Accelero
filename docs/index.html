@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DDR-Accelero - Results & Artifacts</title>
+    <title>DDR-Accelero - Artifacts</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -18,38 +18,6 @@
             border-bottom: 3px solid #0066cc;
             padding-bottom: 10px;
         }
-        h2 {
-            color: #0066cc;
-            margin-top: 30px;
-        }
-        .gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .gallery-item {
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
-        .gallery-item:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-        .gallery-item img {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        .gallery-item p {
-            padding: 10px;
-            margin: 0;
-            font-size: 14px;
-            color: #666;
-        }
         .info {
             background: white;
             padding: 20px;
@@ -63,6 +31,12 @@
         a:hover {
             text-decoration: underline;
         }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
     </style>
 </head>
 <body>
@@ -71,62 +45,20 @@
     <div class="info">
         <p><strong>Machine Learning-powered Dance Dance Revolution arrow prediction from accelerometer data</strong></p>
         <p>Repository: <a href="https://github.com/cb-embedded/DDR-Accelero">github.com/cb-embedded/DDR-Accelero</a></p>
-    </div>
-
-    <h2>Training Results</h2>
-    <div class="gallery">
-        <div class="gallery-item">
-            <img src="training_history.png" alt="Training History">
-            <p>Training History</p>
-        </div>
-    </div>
-
-    <h2>Prediction Samples</h2>
-    <div class="gallery">
-        <div class="gallery-item">
-            <img src="prediction_sample_01.png" alt="Prediction Sample 1">
-            <p>Prediction Sample 1</p>
-        </div>
-        <div class="gallery-item">
-            <img src="prediction_sample_02.png" alt="Prediction Sample 2">
-            <p>Prediction Sample 2</p>
-        </div>
-        <div class="gallery-item">
-            <img src="prediction_sample_03.png" alt="Prediction Sample 3">
-            <p>Prediction Sample 3</p>
-        </div>
-        <div class="gallery-item">
-            <img src="prediction_sample_04.png" alt="Prediction Sample 4">
-            <p>Prediction Sample 4</p>
-        </div>
-        <div class="gallery-item">
-            <img src="prediction_sample_05.png" alt="Prediction Sample 5">
-            <p>Prediction Sample 5</p>
-        </div>
-    </div>
-
-    <h2>Alignment Examples</h2>
-    <div class="gallery">
-        <div class="gallery-item">
-            <img src="Lucky_Orb_5_Medium-2026-01-06_18-45-00_CLEAN.png" alt="Lucky Orb Alignment">
-            <p>Lucky Orb - Alignment Result</p>
-        </div>
-        <div class="gallery-item">
-            <img src="Decorator_Medium_6-2026-01-07_06-27-54_CLEAN.png" alt="Decorator Alignment">
-            <p>Decorator - Alignment Result</p>
-        </div>
-    </div>
-
-    <h2>Dataset Samples</h2>
-    <div class="gallery">
-        <div class="gallery-item">
-            <img src="dataset_sample_00.png" alt="Dataset Sample">
-            <p>Dataset Sample - Arrow Pattern</p>
-        </div>
-        <div class="gallery-item">
-            <img src="dataset_sample_double_Left_Right.png" alt="Double Arrow">
-            <p>Dataset Sample - Double Arrow (Left+Right)</p>
-        </div>
+        
+        <h2>Artifacts</h2>
+        <p>Training artifacts (images, visualizations) are generated when you run the training script:</p>
+        <code>python train_model.py &lt;captures...&gt;</code>
+        
+        <p>Artifacts will appear here automatically after training completes.</p>
+        
+        <h2>Getting Started</h2>
+        <ol>
+            <li>Clone the repository</li>
+            <li>Install dependencies: <code>pip install -r requirements.txt</code></li>
+            <li>Run training with your sensor captures</li>
+            <li>Visualizations will be generated in this directory</li>
+        </ol>
     </div>
 </body>
 </html>
