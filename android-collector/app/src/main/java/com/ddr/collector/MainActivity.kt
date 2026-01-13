@@ -108,10 +108,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.HIGH_SAMPLING_RATE_SENSORS) 
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.HIGH_SAMPLING_RATE_SENSORS)
                 != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, 
-                    arrayOf(Manifest.permission.HIGH_SAMPLING_RATE_SENSORS), 1)
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(Manifest.permission.HIGH_SAMPLING_RATE_SENSORS), PERMISSION_REQUEST_CODE)
             }
         }
     }
@@ -247,5 +247,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             }
             startActivity(Intent.createChooser(intent, "Share sensor data"))
         }
+    }
+
+    companion object {
+        private const val PERMISSION_REQUEST_CODE = 1
     }
 }
