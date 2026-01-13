@@ -27,7 +27,7 @@ def load_trained_model(model_path='artifacts/trained_model.h5'):
 
 
 def make_predictions_on_song(model, capture_path, sm_path, diff_level, 
-                              start_time, duration, window_size=1.0):
+                              start_time, duration, window_size=1.98):
     """
     Make predictions on a specific time window of a song.
     
@@ -38,7 +38,7 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
         diff_level: Difficulty level
         start_time: Start time in seconds for prediction window
         duration: Duration of prediction window in seconds
-        window_size: Size of sliding window for predictions (default 1.0s)
+        window_size: Size of sliding window for predictions (default 1.98s = 198 samples)
     
     Returns:
         predictions: List of predicted arrow events (time, arrows)
@@ -66,6 +66,13 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
     # Make predictions
     print("[5/5] Making predictions...")
     
+    # Convert sensors dictionary to 2D numpy array
+    sensor_array = np.column_stack([
+        sensors['acc_x'], sensors['acc_y'], sensors['acc_z'],
+        sensors['gyro_x'], sensors['gyro_y'], sensors['gyro_z'],
+        sensors['mag_x'], sensors['mag_y'], sensors['mag_z']
+    ])
+    
     dt = 0.01
     num_samples = int(window_size / dt)
     
@@ -79,7 +86,7 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
             t_current += 0.1
             continue
         
-        sensor_window = sensors[mask][:num_samples]
+        sensor_window = sensor_array[mask][:num_samples]
         
         if len(sensor_window) < num_samples:
             t_current += 0.1
@@ -88,7 +95,7 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
         # Make prediction
         X = sensor_window.reshape(1, num_samples, 9)
         pred = model.predict(X, verbose=0)[0]
-        pred_binary = (pred > 0.5).astype(int)
+        pred_binary = (pred > 0.3).astype(int)  # Lower threshold for more predictions
         
         # If any arrow predicted, add to predictions
         if np.any(pred_binary):
@@ -162,7 +169,11 @@ def main():
     song_name = Path(sm_path).stem.replace(' ', '_')
     output_file = output_dir / f'{song_name}_prediction_comparison.png'
     
-    visualize_arrows(ground_truth, predictions, output_path=str(output_file))
+    # Convert tuples to dictionaries for visualization
+    gt_dict = [{'time': t, 'arrows': arr} for t, arr in ground_truth]
+    pred_dict = [{'time': t, 'arrows': arr} for t, arr in predictions]
+    
+    visualize_arrows(gt_dict, pred_dict, output_path=str(output_file))
     
     print(f"\n✓ Visualization saved to: {output_file}")
     
