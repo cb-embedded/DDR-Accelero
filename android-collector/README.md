@@ -23,15 +23,48 @@ Minimalistic Android app for collecting accelerometer and gyroscope data at maxi
 
 ## Build
 
+### Using Gradle Wrapper (Recommended)
+
 ```bash
+cd android-collector
 ./gradlew assembleDebug
+```
+
+The APK will be generated at: `app/build/outputs/apk/debug/app-debug.apk`
+
+### Using GitHub Actions
+
+The repository includes a GitHub Actions workflow that automatically builds the APK when changes are pushed to the `android-collector` directory. The built APK is available as a downloadable artifact from the Actions tab.
+
+### Prerequisites
+
+- JDK 17 or higher
+- Android SDK (automatically downloaded by Gradle)
+
+If building locally and Android SDK is not automatically detected, create a `local.properties` file:
+
+```
+sdk.dir=/path/to/android/sdk
 ```
 
 ## Install
 
+### Option 1: Build and Install
+
 ```bash
+cd android-collector
 ./gradlew installDebug
 ```
+
+### Option 2: Manual Install
+
+```bash
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Option 3: Download from GitHub Actions
+
+Download the pre-built APK from the [GitHub Actions artifacts](../../actions) and install it manually on your device.
 
 ## Data Format
 
