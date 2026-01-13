@@ -3,69 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DDR Accelero - Web Inference</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="lib/jszip.min.js"></script>
-    <script src="lib/ort.min.js"></script>
+    <title>DDR-Accelero - Artifacts</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>DDR Accelero</h1>
-            <p class="subtitle">Machine Learning-based DDR Arrow Prediction</p>
-        </header>
-
-        <div class="upload-section">
-            <div class="upload-group">
-                <h3>Sensor Capture</h3>
-                <input type="file" id="zipFile" accept=".zip" />
-                <div id="zipStatus" class="status"></div>
-            </div>
-
-            <div class="upload-group">
-                <h3>Chart File (.sm) <span style="font-size: 0.8em; color: #666; font-weight: normal;">(Optional)</span></h3>
-                <input type="file" id="smFile" accept=".sm" />
-                <div id="smStatus" class="status"></div>
-            </div>
-
-            <div class="upload-group">
-                <h3>Difficulty Level</h3>
-                <select id="difficulty">
-                    <option value="5">5 (Easy/Medium)</option>
-                    <option value="6">6 (Medium)</option>
-                    <option value="7">7 (Medium/Hard)</option>
-                    <option value="8">8 (Hard)</option>
-                    <option value="9">9 (Hard/Expert)</option>
-                    <option value="10">10 (Expert)</option>
-                </select>
-            </div>
-
-            <div class="upload-group">
-                <h3>Run Inference</h3>
-                <button id="predictButton" disabled>Predict Arrows</button>
-                <div id="progress" class="status"></div>
-            </div>
-        </div>
-
-        <div id="results" class="results-section" style="display: none;">
-            <h2>Results</h2>
-            <div id="stats" class="stats"></div>
-            <div class="visualization-container">
-                <div id="visualization" class="visualization"></div>
-            </div>
-        </div>
-
-        <footer>
-            <p>
-                <a href="https://github.com/cb-embedded/DDR-Accelero" target="_blank">GitHub Repository</a>
-            </p>
-        </footer>
+    <h1>🎮 DDR-Accelero</h1>
+    
+    <div class="info">
+        <p><strong>Machine Learning-powered Dance Dance Revolution arrow prediction from accelerometer data</strong></p>
+        <p>Repository: <a href="https://github.com/cb-embedded/DDR-Accelero">github.com/cb-embedded/DDR-Accelero</a></p>
+        
+        <h2>Artifacts</h2>
+        <p>Training artifacts (images, visualizations) are generated when you run the training script:</p>
+        <code>python train_model.py &lt;captures...&gt;</code>
+        
+        <p>Artifacts will appear here automatically after training completes.</p>
+        
+        <h2>Getting Started</h2>
+        <ol>
+            <li>Clone the repository</li>
+            <li>Install dependencies: <code>pip install -r requirements.txt</code></li>
+            <li>Run training with your sensor captures</li>
+            <li>Visualizations will be generated in this directory</li>
+        </ol>
     </div>
-
-    <script src="sm-parser.js"></script>
-    <script src="zip-handler.js"></script>
-    <script src="inference.js"></script>
-    <script src="visualization.js"></script>
-    <script src="app.js"></script>
 </body>
 </html>

@@ -1,35 +1,27 @@
 #!/usr/bin/env python3
 """
-Predict arrows for a song excluded from the training set and compare with ground truth.
+Predict arrows for a song and compare with ground truth using Keras model.
 
 This script:
-1. Loads the trained model
-2. Makes predictions on a hold-out song (excluded from training)
-3. Filters predictions by offset threshold to avoid duplicates
-4. Compares predictions with ground truth using visualization
+1. Loads the trained Keras model
+2. Makes predictions on a song
+3. Compares predictions with ground truth using visualization
 """
 
 import sys
 import numpy as np
-import torch
 from pathlib import Path
+from tensorflow import keras
 
 # Import from existing modules
-from train_model import ArrowCNN
-from create_dataset import load_sensor_data, parse_sm_file
-from align_clean import align_capture
-from visualize_arrows import extract_sm_window, visualize_arrows
+from core.dataset import load_sensor_data, parse_sm_file
+from core.align import align_capture
+from utils.visualize import extract_sm_window, visualize_arrows
 
 
-def load_trained_model(model_path='artifacts/trained_model.pth'):
-    """Load the trained CNN model."""
-    checkpoint = torch.load(model_path, map_location='cpu')
-    
-    # Initialize model (assuming standard parameters)
-    model = ArrowCNN(input_channels=9, seq_length=198)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-    
+def load_trained_model(model_path='artifacts/trained_model.h5'):
+    """Load the trained Keras model."""
+    model = keras.models.load_model(model_path)
     print(f"✓ Loaded trained model from: {model_path}")
     return model
 
@@ -40,110 +32,95 @@ def make_predictions_on_song(model, capture_path, sm_path, diff_level,
     Make predictions on a specific time window of a song.
     
     Args:
-        model: Trained PyTorch model
+        model: Trained Keras model
         capture_path: Path to sensor capture zip
         sm_path: Path to .sm file
         diff_level: Difficulty level
         start_time: Start time in seconds for prediction window
         duration: Duration of prediction window in seconds
         window_size: Size of sliding window for predictions (default 1.0s)
-        
+    
     Returns:
-        list of dicts: Predictions in format [{'time': t, 'arrows': [L,D,U,R]}, ...]
+        predictions: List of predicted arrow events (time, arrows)
+        ground_truth: List of ground truth arrow events (time, arrows)
     """
-    print(f"\n[1/4] Loading sensor data from {Path(capture_path).name}...")
-    t_sensor, sensors_dict = load_sensor_data(capture_path)
+    print("\n[1/5] Loading sensor data...")
+    t_sensor, sensors = load_sensor_data(capture_path)
     
-    # Convert sensors dict to numpy array [N x 9]
-    sensors = np.column_stack([
-        sensors_dict['acc_x'], sensors_dict['acc_y'], sensors_dict['acc_z'],
-        sensors_dict['gyro_x'], sensors_dict['gyro_y'], sensors_dict['gyro_z'],
-        sensors_dict['mag_x'], sensors_dict['mag_y'], sensors_dict['mag_z']
-    ])
-    
-    print(f"[2/4] Parsing SM file...")
+    print("[2/5] Parsing SM file...")
     t_arrows, arrows, bpm = parse_sm_file(sm_path, diff_level, diff_type='medium')
     
-    print(f"[3/4] Aligning capture with chart...")
+    print("[3/5] Aligning...")
     result = align_capture(capture_path, sm_path, diff_level, diff_type='medium', verbose=False)
     offset = result['offset']
-    print(f"  Alignment offset: {offset:.3f}s")
+    print(f"  Offset: {offset:.3f}s")
     
-    # Convert chart time to sensor time
-    sensor_start = start_time + offset
-    sensor_end = sensor_start + duration
+    # Extract ground truth in prediction window
+    print(f"[4/5] Extracting ground truth ({start_time:.1f}s - {start_time+duration:.1f}s)...")
+    t_adjusted = t_arrows + offset
     
-    print(f"[4/4] Making predictions on {duration}s window (chart time {start_time:.1f}s to {start_time+duration:.1f}s)...")
+    mask = (t_adjusted >= start_time) & (t_adjusted < start_time + duration)
+    ground_truth = [(t_adjusted[i], arrows[i]) for i in range(len(t_arrows)) if mask[i]]
+    print(f"  Ground truth arrows: {len(ground_truth)}")
     
-    # Match the model's expected input size
-    expected_timesteps = 198
+    # Make predictions
+    print("[5/5] Making predictions...")
     
-    # Make predictions at regular intervals (every 0.1s)
-    prediction_interval = 0.1  # seconds
-    prediction_times = np.arange(sensor_start, sensor_end, prediction_interval)
+    dt = 0.01
+    num_samples = int(window_size / dt)
     
     predictions = []
-    device = torch.device('cpu')
-    model = model.to(device)
+    t_current = start_time
     
-    with torch.no_grad():
-        for pred_time in prediction_times:
-            # Find the window center in sensor timeline
-            center_idx = np.searchsorted(t_sensor, pred_time)
-            
-            # Extract window: we need 198 samples total
-            half_samples = expected_timesteps // 2  # 99
-            start_idx = center_idx - half_samples
-            end_idx = start_idx + expected_timesteps
-            
-            # Skip if window is out of bounds
-            if start_idx < 0 or end_idx >= len(sensors):
-                continue
-            
-            # Extract sensor window [198 x 9]
-            sensor_window = sensors[start_idx:end_idx, :]
-            
-            # Verify size
-            if sensor_window.shape[0] != expected_timesteps:
-                continue
-            
-            # Prepare input for model [1, channels, time_steps]
-            X = torch.FloatTensor(sensor_window).unsqueeze(0).permute(0, 2, 1).to(device)
-            
-            # Make prediction
-            arrows_out = model(X)
-            
-            # Convert to binary arrows (threshold at 0.5)
-            pred_arrows = (arrows_out[0] > 0.5).float().cpu().numpy().astype(int)
-            
-            # Only add prediction if at least one arrow is predicted
-            if pred_arrows.sum() > 0:
-                # Convert sensor time back to chart time
-                chart_time = pred_time - offset
-                # Make relative to window start
-                relative_time = chart_time - start_time
-                
-                # Only include if within our target duration
-                if 0 <= relative_time <= duration:
-                    predictions.append({
-                        'time': relative_time,
-                        'arrows': pred_arrows.tolist()
-                    })
+    while t_current + window_size <= start_time + duration:
+        # Extract sensor window
+        mask = (t_sensor >= t_current) & (t_sensor < t_current + window_size)
+        if np.sum(mask) < num_samples:
+            t_current += 0.1
+            continue
+        
+        sensor_window = sensors[mask][:num_samples]
+        
+        if len(sensor_window) < num_samples:
+            t_current += 0.1
+            continue
+        
+        # Make prediction
+        X = sensor_window.reshape(1, num_samples, 9)
+        pred = model.predict(X, verbose=0)[0]
+        pred_binary = (pred > 0.5).astype(int)
+        
+        # If any arrow predicted, add to predictions
+        if np.any(pred_binary):
+            t_pred = t_current + window_size / 2
+            predictions.append((t_pred, pred_binary))
+        
+        t_current += 0.1
     
-    print(f"  Generated {len(predictions)} predictions")
-    return predictions
+    print(f"  Raw predictions: {len(predictions)}")
+    
+    # Filter predictions by offset to avoid duplicates
+    filtered_predictions = []
+    if len(predictions) > 0:
+        filtered_predictions.append(predictions[0])
+        
+        for t, arrows in predictions[1:]:
+            if t - filtered_predictions[-1][0] > 0.3:
+                filtered_predictions.append((t, arrows))
+    
+    print(f"  Filtered predictions: {len(filtered_predictions)}")
+    
+    return filtered_predictions, ground_truth
 
 
 def main():
     if len(sys.argv) < 4:
+        print(__doc__)
         print("\nUsage: python predict_song.py <capture_zip> <sm_file> <diff_level> [start_time] [duration]")
         print("\nExample:")
         print("  python predict_song.py \\")
-        print("    'raw_data/Butterfly_Cat_6_Medium-2026-01-10_09-34-07.zip' \\")
-        print("    'sm_files/Butterfly Cat.sm' \\")
-        print("    6 \\")
-        print("    70.0 \\")
-        print("    10.0")
+        print("    'raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip' \\")
+        print("    'sm_files/Lucky Orb.sm' 5 70.0 10.0")
         sys.exit(1)
     
     capture_path = sys.argv[1]
@@ -153,77 +130,47 @@ def main():
     duration = float(sys.argv[5]) if len(sys.argv) > 5 else 10.0
     
     print("="*70)
-    print("PREDICT ARROWS FOR HOLD-OUT SONG")
+    print("DDR PREDICTION - KERAS CNN")
     print("="*70)
     print(f"\nCapture: {Path(capture_path).name}")
-    print(f"SM File: {Path(sm_path).name}")
+    print(f"SM file: {Path(sm_path).name}")
     print(f"Difficulty: {diff_level}")
-    print(f"Time window: {start_time}s to {start_time + duration}s")
+    print(f"Prediction window: {start_time:.1f}s - {start_time+duration:.1f}s")
     
-    # Step 1: Load trained model
+    # Load model
     print("\n" + "="*70)
-    print("STEP 1: LOADING TRAINED MODEL")
+    print("LOADING MODEL")
     print("="*70)
-    model = load_trained_model('artifacts/trained_model.pth')
+    model = load_trained_model('artifacts/trained_model.h5')
     
-    # Step 2: Make predictions
+    # Make predictions
     print("\n" + "="*70)
-    print("STEP 2: MAKING PREDICTIONS")
+    print("MAKING PREDICTIONS")
     print("="*70)
-    
-    predictions = make_predictions_on_song(
-        model, capture_path, sm_path, diff_level,
-        start_time, duration
+    predictions, ground_truth = make_predictions_on_song(
+        model, capture_path, sm_path, diff_level, start_time, duration
     )
     
-    # Step 3: Extract ground truth
+    # Visualize
     print("\n" + "="*70)
-    print("STEP 3: EXTRACTING GROUND TRUTH FROM .SM FILE")
+    print("GENERATING VISUALIZATION")
     print("="*70)
     
-    ground_truth = extract_sm_window(
-        sm_path, diff_level, 'medium',
-        start_time=start_time,
-        duration=duration
-    )
-    print(f"  Ground truth: {len(ground_truth)} arrow events")
-    
-    # Step 4: Create visualization
-    print("\n" + "="*70)
-    print("STEP 4: CREATING COMPARISON VISUALIZATION")
-    print("="*70)
-    
-    output_dir = Path('artifacts')
+    output_dir = Path('docs')
     output_dir.mkdir(exist_ok=True)
     
     song_name = Path(sm_path).stem.replace(' ', '_')
-    output_path = output_dir / f'{song_name}_prediction_comparison.png'
+    output_file = output_dir / f'{song_name}_prediction_comparison.png'
     
-    visualize_arrows(
-        ground_truth,
-        predictions,
-        duration=duration,
-        output_path=output_path,
-        title1=f'Original Chart ({Path(sm_path).stem} Medium {diff_level})',
-        title2=f'ML Predictions'
-    )
+    visualize_arrows(ground_truth, predictions, output_path=str(output_file))
     
-    # Print summary
+    print(f"\n✓ Visualization saved to: {output_file}")
+    
     print("\n" + "="*70)
-    print("PREDICTION COMPARISON COMPLETE")
+    print("PREDICTION COMPLETE")
     print("="*70)
-    print(f"\n✓ Visualization saved to: {output_path}")
-    print(f"\n  Time window analyzed: {start_time}s - {start_time + duration}s")
-    print(f"  Original arrows: {len(ground_truth)}")
-    print(f"  Predicted arrows: {len(predictions)}")
-    print(f"  Detection rate: {len(predictions)}/{len(ground_truth)} ({100*len(predictions)/max(1,len(ground_truth)):.1f}%)")
-    
-    print("\n" + "="*70)
-    print("The figure shows:")
-    print("  • Left column: Original arrow pattern from .sm file")
-    print("  • Right column: ML model predictions from sensor data")
-    print("  • Arrows colored by type (Left=Pink, Down=Cyan, Up=Yellow, Right=Red)")
-    print("  • Time flows from bottom to top (like StepMania gameplay)")
+    print(f"\nGround truth arrows: {len(ground_truth)}")
+    print(f"Predicted arrows: {len(predictions)}")
     print("="*70)
 
 
