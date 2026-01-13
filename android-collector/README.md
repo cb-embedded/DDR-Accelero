@@ -41,18 +41,20 @@ The app exports data in CBOR format with the following structure:
 {
   "device": "Device model name",
   "timestamp": "2026-01-13_12-34-56",
-  "sample_count": 1000,
-  "timestamps": [nanosecond timestamps...],
+  "accelerometer_count": 500,
+  "gyroscope_count": 500,
   "accelerometer": [
-    {"x": 0.1, "y": 0.2, "z": 9.8},
+    {"timestamp": 1234567890, "x": 0.1, "y": 0.2, "z": 9.8},
     ...
   ],
   "gyroscope": [
-    {"x": 0.01, "y": 0.02, "z": 0.03},
+    {"timestamp": 1234567891, "x": 0.01, "y": 0.02, "z": 0.03},
     ...
   ]
 }
 ```
+
+Each sensor reading includes its own nanosecond timestamp for precise synchronization.
 
 ## Usage
 

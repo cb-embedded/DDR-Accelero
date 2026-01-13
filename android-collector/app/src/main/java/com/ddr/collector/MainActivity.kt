@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -28,9 +29,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var accelerometer: Sensor? = null
     private var gyroscope: Sensor? = null
     private var isRecording = false
-    private val accelData = mutableListOf<FloatArray>()
-    private val gyroData = mutableListOf<FloatArray>()
-    private val timestamps = mutableListOf<Long>()
+    private val sensorData = mutableListOf<SensorSample>()
     private var lastFramerateUpdate = 0L
     private var frameCount = 0
     private var currentFramerate = 0f
@@ -39,6 +38,29 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var downloadButton: Button
     private lateinit var shareButton: Button
     private var lastFile: File? = null
+
+    data class SensorSample(
+        val timestamp: Long,
+        val accelX: Float?,
+        val accelY: Float?,
+        val accelZ: Float?,
+        val gyroX: Float?,
+        val gyroY: Float?,
+        val gyroZ: Float?
+    )
+
+    private val saveFileLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/cbor")
+    ) { uri ->
+        uri?.let {
+            lastFile?.inputStream()?.use { input ->
+                contentResolver.openOutputStream(it)?.use { output ->
+                    input.copyTo(output)
+                    Toast.makeText(this, "File saved", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +87,25 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         shareButton.setOnClickListener { shareFile() }
     }
 
+    override fun onPause() {
+        super.onPause()
+        if (isRecording) {
+            sensorManager.unregisterListener(this)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (isRecording) {
+            accelerometer?.let {
+                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
+            }
+            gyroscope?.let {
+                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
+            }
+        }
+    }
+
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.HIGH_SAMPLING_RATE_SENSORS) 
@@ -76,9 +117,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun startRecording() {
-        accelData.clear()
-        gyroData.clear()
-        timestamps.clear()
+        sensorData.clear()
         frameCount = 0
         lastFramerateUpdate = System.currentTimeMillis()
 
@@ -100,7 +139,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         isRecording = false
         toggleButton.text = "Start Recording"
 
-        if (timestamps.isNotEmpty()) {
+        if (sensorData.isNotEmpty()) {
             saveDataToCbor()
             downloadButton.isEnabled = true
             shareButton.isEnabled = true
@@ -111,14 +150,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (!isRecording) return
 
         val timestamp = System.nanoTime()
-        timestamps.add(timestamp)
 
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                accelData.add(floatArrayOf(event.values[0], event.values[1], event.values[2]))
+                sensorData.add(SensorSample(
+                    timestamp,
+                    event.values[0], event.values[1], event.values[2],
+                    null, null, null
+                ))
             }
             Sensor.TYPE_GYROSCOPE -> {
-                gyroData.add(floatArrayOf(event.values[0], event.values[1], event.values[2]))
+                sensorData.add(SensorSample(
+                    timestamp,
+                    null, null, null,
+                    event.values[0], event.values[1], event.values[2]
+                ))
             }
         }
 
@@ -139,35 +185,39 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun saveDataToCbor() {
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
         val filename = "sensor_data_$timestamp.cbor"
-        lastFile = File(filesDir, filename)
+        val file = File(filesDir, filename)
+        lastFile = file
 
-        FileOutputStream(lastFile!!).use { fos ->
+        val accelSamples = sensorData.filter { it.accelX != null }
+        val gyroSamples = sensorData.filter { it.gyroX != null }
+
+        FileOutputStream(file).use { fos ->
             val builder = CborBuilder()
             val map = builder.addMap()
             
             map.put("device", Build.MODEL)
             map.put("timestamp", timestamp)
-            map.put("sample_count", timestamps.size.toLong())
-            
-            val timestampArray = map.putArray("timestamps")
-            timestamps.forEach { timestampArray.add(it) }
+            map.put("accelerometer_count", accelSamples.size.toLong())
+            map.put("gyroscope_count", gyroSamples.size.toLong())
             
             val accelArray = map.putArray("accelerometer")
-            accelData.forEach { sample ->
+            accelSamples.forEach { sample ->
                 val sampleMap = accelArray.addMap()
-                sampleMap.put("x", sample[0].toDouble())
-                sampleMap.put("y", sample[1].toDouble())
-                sampleMap.put("z", sample[2].toDouble())
+                sampleMap.put("timestamp", sample.timestamp)
+                sampleMap.put("x", sample.accelX!!.toDouble())
+                sampleMap.put("y", sample.accelY!!.toDouble())
+                sampleMap.put("z", sample.accelZ!!.toDouble())
                 sampleMap.end()
             }
             accelArray.end()
             
             val gyroArray = map.putArray("gyroscope")
-            gyroData.forEach { sample ->
+            gyroSamples.forEach { sample ->
                 val sampleMap = gyroArray.addMap()
-                sampleMap.put("x", sample[0].toDouble())
-                sampleMap.put("y", sample[1].toDouble())
-                sampleMap.put("z", sample[2].toDouble())
+                sampleMap.put("timestamp", sample.timestamp)
+                sampleMap.put("x", sample.gyroX!!.toDouble())
+                sampleMap.put("y", sample.gyroY!!.toDouble())
+                sampleMap.put("z", sample.gyroZ!!.toDouble())
                 sampleMap.end()
             }
             gyroArray.end()
@@ -182,12 +232,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun downloadFile() {
         lastFile?.let { file ->
-            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/cbor"
-                putExtra(Intent.EXTRA_TITLE, file.name)
-            }
-            startActivityForResult(intent, REQUEST_SAVE_FILE)
+            saveFileLauncher.launch(file.name)
         }
     }
 
@@ -202,23 +247,5 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             }
             startActivity(Intent.createChooser(intent, "Share sensor data"))
         }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_SAVE_FILE && resultCode == RESULT_OK) {
-            data?.data?.let { uri ->
-                lastFile?.inputStream()?.use { input ->
-                    contentResolver.openOutputStream(uri)?.use { output ->
-                        input.copyTo(output)
-                        Toast.makeText(this, "File saved", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
-    companion object {
-        private const val REQUEST_SAVE_FILE = 1
     }
 }
