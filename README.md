@@ -13,12 +13,12 @@ View alignment results, training visualizations, and prediction examples.
 Find time offset between sensor recording and chart:
 
 ```bash
-python align_clean.py <capture_zip> <sm_file> <difficulty_level>
+python -m core.align <capture_zip> <sm_file> <difficulty_level>
 ```
 
 Example:
 ```bash
-python align_clean.py "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" 5
+python -m core.align "raw_data/Lucky_Orb_5_Medium-2026-01-06_18-45-00.zip" "sm_files/Lucky Orb.sm" 5
 ```
 
 ### Training
@@ -57,7 +57,7 @@ Arguments: `<capture_zip> <sm_file> <diff_level> [start_time] [duration]`
 Visualize arrow patterns from .sm files or predictions:
 
 ```python
-from visualize_arrows import extract_sm_window, visualize_arrows
+from utils.visualize import extract_sm_window, visualize_arrows
 
 events = extract_sm_window('sm_files/Lucky Orb.sm', 5, 'medium', start_time=70.0, duration=10.0)
 visualize_arrows(ground_truth, predictions, output_path='comparison.png')
@@ -65,10 +65,10 @@ visualize_arrows(ground_truth, predictions, output_path='comparison.png')
 
 ### Model Export
 
-Convert trained model to ONNX format for web inference:
+Convert trained model to ONNX format:
 
 ```bash
-python export_model_to_onnx.py --model-path artifacts/trained_model.pth --output docs/model.onnx
+python -m utils.export_onnx --model-path artifacts/trained_model.pth --output docs/model.onnx
 ```
 
 ## Requirements
@@ -83,12 +83,14 @@ Dependencies: numpy, pandas, scipy, matplotlib, scikit-learn, torch
 
 ```
 DDR-Accelero/
-├── align_clean.py       # Alignment API (core working functionality)
-├── create_dataset.py    # Dataset creation
-├── train_model.py       # Training API
-├── predict_song.py      # Prediction API
-├── visualize_arrows.py  # Visualization API
-├── export_model_to_onnx.py  # Model conversion
+├── core/
+│   ├── align.py         # Alignment functionality (biomechanical approach)
+│   └── dataset.py       # Dataset creation from captures and SM files
+├── utils/
+│   ├── visualize.py     # Visualization utilities
+│   └── export_onnx.py   # Model export to ONNX
+├── train_model.py       # Training script
+├── predict_song.py      # Prediction script
 ├── docs/                # Artifacts and results (GitHub Pages)
 ├── raw_data/            # Sensor captures
 ├── sm_files/            # StepMania charts

@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Export trained PyTorch model to ONNX format for web inference.
+Export trained PyTorch model to ONNX format.
 
-This script converts the trained ArrowCNN model to ONNX format,
-which can be loaded in the browser using ONNX Runtime Web.
+This script converts the trained ArrowCNN model to ONNX format.
 
 Usage:
-    python export_model_to_onnx.py [--model-path PATH] [--output PATH]
+    python -m utils.export_onnx [--model-path PATH] [--output PATH]
 
 Example:
-    python export_model_to_onnx.py --model-path artifacts/trained_model.pth --output docs/model.onnx
+    python -m utils.export_onnx --model-path artifacts/trained_model.pth --output docs/model.onnx
 """
 
 import argparse
@@ -119,18 +118,18 @@ def export_to_onnx(model_path, output_path, seq_length=198):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Export PyTorch model to ONNX format for web inference',
+        description='Export PyTorch model to ONNX format',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Export with default paths
-  python export_model_to_onnx.py
+  python -m utils.export_onnx
 
   # Export with custom paths
-  python export_model_to_onnx.py --model-path my_model.pth --output web/model.onnx
+  python -m utils.export_onnx --model-path my_model.pth --output docs/model.onnx
   
   # Export with custom sequence length
-  python export_model_to_onnx.py --seq-length 256
+  python -m utils.export_onnx --seq-length 256
         """
     )
     

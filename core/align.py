@@ -200,8 +200,8 @@ def align_capture(capture_path, sm_path, diff_level, diff_type='medium', verbose
 def main():
     if len(sys.argv) != 4:
         print(__doc__)
-        print("\nUsage: python align_clean.py <capture.zip> <song.sm> <difficulty_level>")
-        print("Example: python align_clean.py 'raw_data/Lucky_Orb_5_Medium-....zip' 'sm_files/Lucky Orb.sm' 5")
+        print("\nUsage: python -m core.align <capture.zip> <song.sm> <difficulty_level>")
+        print("Example: python -m core.align 'raw_data/Lucky_Orb_5_Medium-....zip' 'sm_files/Lucky Orb.sm' 5")
         sys.exit(1)
     
     capture_path = Path(sys.argv[1])

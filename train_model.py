@@ -24,8 +24,8 @@ import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 
 # Import functions from existing scripts
-from create_dataset import load_sensor_data, parse_sm_file, create_dataset
-from align_clean import align_capture
+from core.dataset import load_sensor_data, parse_sm_file, create_dataset
+from core.align import align_capture
 
 
 

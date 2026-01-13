@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import zipfile
-from align_clean import align_capture
+from .align import align_capture
 
 
 def load_sensor_data(capture_path, dt=0.01):
@@ -449,8 +449,8 @@ def visualize_sample(idx, X_sample, Y_sample, t_center, t_arrows, arrows,
 def main():
     if len(sys.argv) != 5:
         print(__doc__)
-        print("\nUsage: python create_dataset.py <capture.zip> <song.sm> <difficulty_level> <num_samples>")
-        print("Example: python create_dataset.py 'raw_data/Lucky_Orb_5_Medium-....zip' 'sm_files/Lucky Orb.sm' 5 10")
+        print("\nUsage: python -m core.dataset <capture.zip> <song.sm> <difficulty_level> <num_samples>")
+        print("Example: python -m core.dataset 'raw_data/Lucky_Orb_5_Medium-....zip' 'sm_files/Lucky Orb.sm' 5 10")
         sys.exit(1)
     
     capture_path = Path(sys.argv[1])

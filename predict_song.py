@@ -16,9 +16,9 @@ from pathlib import Path
 
 # Import from existing modules
 from train_model import ArrowCNN
-from create_dataset import load_sensor_data, parse_sm_file
-from align_clean import align_capture
-from visualize_arrows import extract_sm_window, visualize_arrows
+from core.dataset import load_sensor_data, parse_sm_file
+from core.align import align_capture
+from utils.visualize import extract_sm_window, visualize_arrows
 
 
 def load_trained_model(model_path='artifacts/trained_model.pth'):
