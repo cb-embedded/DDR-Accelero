@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/framerateText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Framerate: 0 Hz"
+        android:textSize="24sp"
+        android:layout_marginBottom="32dp" />
+
+    <Button
+        android:id="@+id/toggleButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Start Recording"
+        android:textSize="18sp"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/downloadButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Download"
+        android:textSize="18sp"
+        android:padding="16dp"
+        android:enabled="false"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/shareButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Share"
+        android:textSize="18sp"
+        android:padding="16dp"
+        android:enabled="false" />
+
+</LinearLayout>
