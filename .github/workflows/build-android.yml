@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, copilot/create-folder-for-sample-app ]
+    branches: [ main ]
     paths:
       - 'android-collector/**'
   pull_request:
