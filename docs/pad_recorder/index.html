@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamepad Recorder</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 80px);
+            grid-template-rows: repeat(3, 80px);
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .btn-display {
+            background: #ddd;
+            border: 2px solid #999;
+            border-radius: 4px;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-display.active {
+            background: #4CAF50;
+            border-color: #2E7D32;
+        }
+        .btn-display:nth-child(1) { grid-column: 2; grid-row: 1; }
+        .btn-display:nth-child(2) { grid-column: 1; grid-row: 2; }
+        .btn-display:nth-child(3) { grid-column: 3; grid-row: 2; }
+        .btn-display:nth-child(4) { grid-column: 2; grid-row: 3; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+        .recording {
+            background: #ffebee !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gamepad Recorder</h1>
+    
+    <div id="status">No gamepad connected</div>
+    
+    <div class="btn-grid">
+        <div class="btn-display" id="btn2">↑</div>
+        <div class="btn-display" id="btn0">←</div>
+        <div class="btn-display" id="btn1">→</div>
+        <div class="btn-display" id="btn3">↓</div>
+    </div>
+    
+    <div>
+        <button id="recordBtn">Start Recording</button>
+        <button id="exportBtn">Export Log</button>
+    </div>
+    
+    <div>Events: <span id="eventCount">0</span></div>
+
+    <script>
+        let recording = false;
+        let log = [];
+        let startTime = null;
+        let buttonStates = [false, false, false, false];
+        const btnNames = ['LEFT', 'RIGHT', 'UP', 'DOWN'];
+
+        function getTimestamp() {
+            return startTime ? (performance.now() - startTime) / 1000 : 0;
+        }
+
+        function addEvent(button, pressed) {
+            if (!recording) return;
+            log.push({
+                button: btnNames[button],
+                pressed,
+                timestamp: getTimestamp().toFixed(3)
+            });
+            document.getElementById('eventCount').textContent = log.length;
+        }
+
+        function pollGamepad() {
+            const gamepads = navigator.getGamepads();
+            const gp = gamepads[0];
+            
+            if (!gp) {
+                document.getElementById('status').textContent = 'No gamepad connected';
+                return;
+            }
+            
+            document.getElementById('status').textContent = `Gamepad connected: ${gp.id}`;
+            
+            for (let i = 0; i < 4; i++) {
+                const pressed = gp.buttons[i]?.pressed || false;
+                const elem = document.getElementById(`btn${i}`);
+                
+                if (pressed !== buttonStates[i]) {
+                    buttonStates[i] = pressed;
+                    if (pressed) {
+                        elem.classList.add('active');
+                        addEvent(i, true);
+                    } else {
+                        elem.classList.remove('active');
+                        addEvent(i, false);
+                    }
+                }
+            }
+            
+            requestAnimationFrame(pollGamepad);
+        }
+
+        document.getElementById('recordBtn').addEventListener('click', () => {
+            recording = !recording;
+            const btn = document.getElementById('recordBtn');
+            const status = document.getElementById('status');
+            
+            if (recording) {
+                log = [];
+                startTime = performance.now();
+                btn.textContent = 'Stop Recording';
+                status.classList.add('recording');
+                document.getElementById('eventCount').textContent = '0';
+            } else {
+                btn.textContent = 'Start Recording';
+                status.classList.remove('recording');
+            }
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            if (log.length === 0) {
+                alert('No events recorded');
+                return;
+            }
+            
+            const content = log.map(e => 
+                `${e.timestamp},${e.button},${e.pressed ? '1' : '0'}`
+            ).join('\n');
+            
+            const blob = new Blob(['timestamp,button,pressed\n' + content], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gamepad_log_${Date.now()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        window.addEventListener('gamepadconnected', (e) => {
+            console.log('Gamepad connected:', e.gamepad.id);
+        });
+
+        requestAnimationFrame(pollGamepad);
+    </script>
+</body>
+</html>

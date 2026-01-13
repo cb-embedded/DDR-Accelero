@@ -25,12 +25,11 @@ Thumbs.db
 
 # ML artifacts
 artifacts/*.pkl
+artifacts/*.h5
+!artifacts/trained_model.h5
 artifacts/*.pth
-!artifacts/trained_model.pth
-artifacts/prediction_sample_*.png
-artifacts/dataset_sample_*.png
-artifacts/training_history.png
-!artifacts/training_history.png
+# Generated visualizations in docs/
+docs/*.png
 
 # Test scripts
 test_onnx_model.py
