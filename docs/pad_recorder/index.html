@@ -78,6 +78,7 @@
         let startTime = null;
         let buttonStates = [false, false, false, false];
         const btnNames = ['LEFT', 'RIGHT', 'UP', 'DOWN'];
+        let lastGamepadId = null;
 
         function getTimestamp() {
             return startTime ? (performance.now() - startTime) / 1000 : 0;
@@ -95,11 +96,18 @@
 
         function pollGamepad() {
             const gamepads = navigator.getGamepads();
-            const gp = gamepads[0];
+            const gp = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
             
             if (!gp) {
                 document.getElementById('status').textContent = 'No gamepad connected';
+                lastGamepadId = null;
+                requestAnimationFrame(pollGamepad);
                 return;
+            }
+            
+            if (lastGamepadId !== gp.id) {
+                lastGamepadId = gp.id;
+                console.log('Gamepad connected:', gp.id);
             }
             
             document.getElementById('status').textContent = `Gamepad connected: ${gp.id}`;
