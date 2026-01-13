@@ -37,6 +37,26 @@
             border-radius: 3px;
             font-family: 'Courier New', monospace;
         }
+        .apps {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .app-card {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px solid #ddd;
+            transition: all 0.2s;
+        }
+        .app-card:hover {
+            border-color: #0066cc;
+            transform: translateY(-2px);
+        }
+        .app-card h3 {
+            margin-top: 0;
+        }
     </style>
 </head>
 <body>
@@ -45,6 +65,14 @@
     <div class="info">
         <p><strong>Machine Learning-powered Dance Dance Revolution arrow prediction from accelerometer data</strong></p>
         <p>Repository: <a href="https://github.com/cb-embedded/DDR-Accelero">github.com/cb-embedded/DDR-Accelero</a></p>
+        
+        <h2>Applications</h2>
+        <div class="apps">
+            <a href="pad_recorder/" class="app-card">
+                <h3>🎮 Pad Recorder</h3>
+                <p>Record gamepad button states with timestamps</p>
+            </a>
+        </div>
         
         <h2>Artifacts</h2>
         <p>Training artifacts (images, visualizations) are generated when you run the training script:</p>
