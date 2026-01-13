@@ -39,3 +39,15 @@ test_onnx_real_data.py
 node_modules/
 package.json
 package-lock.json
+
+# Android
+android-collector/.gradle/
+android-collector/.idea/
+android-collector/local.properties
+android-collector/build/
+android-collector/app/build/
+android-collector/*.iml
+android-collector/.DS_Store
+android-collector/captures/
+android-collector/.externalNativeBuild/
+android-collector/.cxx/
