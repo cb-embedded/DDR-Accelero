@@ -494,7 +494,7 @@ def main():
     
     # Generate visualizations
     print(f"\n[5/5] Generating {num_samples} sample visualizations...")
-    out_dir = Path('artifacts')
+    out_dir = Path('docs')
     out_dir.mkdir(exist_ok=True)
     
     # Select samples evenly distributed

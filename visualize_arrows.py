@@ -222,7 +222,7 @@ def main():
     
     # Create visualization
     print("\n[3/3] Creating visualization...")
-    output_dir = Path('artifacts')
+    output_dir = Path('docs')
     output_dir.mkdir(exist_ok=True)
     output_path = output_dir / 'arrow_comparison_demo.png'
     

@@ -562,7 +562,7 @@ def save_model(model, filepath='trained_model.pth'):
     print(f"\nModel saved to: {filepath}")
 
 
-def visualize_predictions(X_raw, Y_test, Y_pred, indices, output_dir='artifacts'):
+def visualize_predictions(X_raw, Y_test, Y_pred, indices, output_dir='docs'):
     """
     Visualize sample predictions with input sensor data.
     
@@ -780,8 +780,8 @@ def main():
     axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('artifacts/training_history.png', dpi=150, bbox_inches='tight')
-    print("  Saved: artifacts/training_history.png")
+    plt.savefig('docs/training_history.png', dpi=150, bbox_inches='tight')
+    print("  Saved: docs/training_history.png")
     plt.close()
     
     # Evaluate on test set
@@ -807,14 +807,14 @@ def main():
     viz_indices = np.random.choice(len(X_test), size=num_viz, replace=False)
     
     visualize_predictions(X_test, Y_test, metrics['Y_pred'], 
-                         viz_indices, output_dir='artifacts')
+                         viz_indices, output_dir='docs')
     
     print("\n" + "="*70)
     print("TRAINING COMPLETE")
     print("="*70)
     print(f"\n✓ Model saved to: artifacts/trained_model.pth")
-    print(f"✓ Training history saved to: artifacts/training_history.png")
-    print(f"✓ Sample predictions saved to: artifacts/prediction_sample_*.png")
+    print(f"✓ Training history saved to: docs/training_history.png")
+    print(f"✓ Sample predictions saved to: docs/prediction_sample_*.png")
     print("\n" + "="*70)
     print("KEY CHANGES: Removed offset prediction for simpler classification!")
     print("="*70)

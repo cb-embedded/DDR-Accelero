@@ -233,9 +233,9 @@ def main():
     
     plt.tight_layout()
     
-    out_dir = Path('artifacts')
+    out_dir = Path('docs')
     out_dir.mkdir(exist_ok=True)
-    out_file = out_dir / f'{capture_path.stem}_CLEAN.png'
+    out_file = out_dir / f'{capture_path.stem}_ALIGN.png'
     fig.savefig(out_file, dpi=150, bbox_inches='tight')
     print(f"\nPlot saved: {out_file}")
     print("="*70)

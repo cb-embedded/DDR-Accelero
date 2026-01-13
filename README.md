@@ -2,13 +2,9 @@
 
 Machine Learning-powered Dance Dance Revolution arrow prediction from accelerometer data.
 
-## Web Application
+**Artifacts and Results:** [https://cb-embedded.github.io/DDR-Accelero/](https://cb-embedded.github.io/DDR-Accelero/)
 
-**Try it online:** [https://cb-embedded.github.io/DDR-Accelero/](https://cb-embedded.github.io/DDR-Accelero/)
-
-Upload sensor capture ZIP files and StepMania charts to run ML inference directly in your browser.
-
-See [docs/README.md](docs/README.md) for web application documentation.
+View alignment results, training visualizations, and prediction examples.
 
 ## API
 
@@ -40,7 +36,7 @@ python train_model.py \
   "raw_data/Decorator_Medium_6-2026-01-07_06-27-54.zip" "sm_files/DECORATOR.sm" 6
 ```
 
-Output: `artifacts/trained_model.pth`, `artifacts/training_history.png`, `artifacts/prediction_sample_*.png`
+Output: `artifacts/trained_model.pth`, `docs/training_history.png`, `docs/prediction_sample_*.png`
 
 ### Prediction
 
@@ -87,16 +83,16 @@ Dependencies: numpy, pandas, scipy, matplotlib, scikit-learn, torch
 
 ```
 DDR-Accelero/
-├── align_clean.py       # Alignment API
+├── align_clean.py       # Alignment API (core working functionality)
 ├── create_dataset.py    # Dataset creation
 ├── train_model.py       # Training API
 ├── predict_song.py      # Prediction API
 ├── visualize_arrows.py  # Visualization API
 ├── export_model_to_onnx.py  # Model conversion
-├── docs/                # Web application
+├── docs/                # Artifacts and results (GitHub Pages)
 ├── raw_data/            # Sensor captures
 ├── sm_files/            # StepMania charts
-└── artifacts/           # Generated outputs
+└── artifacts/           # Trained models
 ```
 
 ## Method
