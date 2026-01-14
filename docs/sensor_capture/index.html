@@ -191,6 +191,9 @@
     </div>
 
     <script>
+        // Configuration
+        const DESIRED_FREQUENCY = 240; // Hz - request high frequency
+        
         let isRecording = false;
         let startTime = null;
         let absoluteStartTime = null;
@@ -202,7 +205,7 @@
         let accelerometer = null;
         let gyroscope = null;
         let usingSensorAPI = false;
-        const DESIRED_FREQUENCY = 240; // Hz - request high frequency
+        let hasFallenBack = false; // Prevent multiple fallback calls
 
         function updateUI() {
             document.getElementById('sampleRate').textContent = Math.round(currentRate) + ' Hz';
@@ -383,13 +386,21 @@
             
             // Try to use Sensor API first (higher frequency, better precision)
             usingSensorAPI = false;
-            let sensorError = false;
+            hasFallenBack = false;
             
             if (typeof Accelerometer !== 'undefined' && typeof Gyroscope !== 'undefined') {
                 try {
                     // Create sensors with high frequency
-                    accelerometer = new Accelerometer({ frequency: DESIRED_FREQUENCY, referenceFrame: 'device' });
-                    gyroscope = new Gyroscope({ frequency: DESIRED_FREQUENCY, referenceFrame: 'device' });
+                    // Try with referenceFrame first, fall back without it if not supported
+                    let sensorOptions = { frequency: DESIRED_FREQUENCY };
+                    try {
+                        accelerometer = new Accelerometer({ ...sensorOptions, referenceFrame: 'device' });
+                        gyroscope = new Gyroscope({ ...sensorOptions, referenceFrame: 'device' });
+                    } catch (e) {
+                        console.log('referenceFrame not supported, using default');
+                        accelerometer = new Accelerometer(sensorOptions);
+                        gyroscope = new Gyroscope(sensorOptions);
+                    }
                     
                     accelerometer.addEventListener('reading', () => handleAccelerometer(accelerometer));
                     gyroscope.addEventListener('reading', () => handleGyroscope(gyroscope));
@@ -397,8 +408,7 @@
                     // Track errors to fall back to DeviceMotion if sensors don't work
                     accelerometer.addEventListener('error', (event) => {
                         console.error('Accelerometer error:', event.error);
-                        if (!sensorError && isRecording) {
-                            sensorError = true;
+                        if (!hasFallenBack && isRecording) {
                             console.log('Sensor API failed, falling back to DeviceMotion API');
                             fallbackToDeviceMotion();
                         }
@@ -406,8 +416,7 @@
                     
                     gyroscope.addEventListener('error', (event) => {
                         console.error('Gyroscope error:', event.error);
-                        if (!sensorError && isRecording) {
-                            sensorError = true;
+                        if (!hasFallenBack && isRecording) {
                             console.log('Sensor API failed, falling back to DeviceMotion API');
                             fallbackToDeviceMotion();
                         }
@@ -438,15 +447,25 @@
         }
         
         function fallbackToDeviceMotion() {
-            if (!isRecording || !usingSensorAPI) return;
+            if (!isRecording || !usingSensorAPI || hasFallenBack) return;
+            
+            hasFallenBack = true; // Prevent multiple calls
             
             // Stop Sensor API
             if (accelerometer) {
-                try { accelerometer.stop(); } catch (e) {}
+                try { 
+                    accelerometer.stop(); 
+                } catch (e) {
+                    console.log('Error stopping accelerometer:', e);
+                }
                 accelerometer = null;
             }
             if (gyroscope) {
-                try { gyroscope.stop(); } catch (e) {}
+                try { 
+                    gyroscope.stop(); 
+                } catch (e) {
+                    console.log('Error stopping gyroscope:', e);
+                }
                 gyroscope = null;
             }
             
