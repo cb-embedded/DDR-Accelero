@@ -109,6 +109,7 @@ Each sensor reading includes its own nanosecond timestamp for precise synchroniz
 The app requires the following permissions:
 
 - `HIGH_SAMPLING_RATE_SENSORS` (Android 12+): Allows sampling rates above 200Hz
+- `WAKE_LOCK`: Prevents CPU from sleeping during background recording to maintain consistent sample rate
 - `FOREGROUND_SERVICE`: Required for background recording
 - `FOREGROUND_SERVICE_SPECIAL_USE`: Special permission for sensor data collection service
 - `POST_NOTIFICATIONS` (Android 13+): Required to show recording notification
