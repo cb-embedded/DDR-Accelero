@@ -266,9 +266,9 @@
             const yamlHeader = `---
 music_name: "${musicName}"
 difficulty_number: ${diffNumber || 'null'}
-difficulty_name: ${diffName || 'null'}
-recorded_at: ${isoTimestamp}
-absolute_start_time: ${isoTimestamp}
+difficulty_name: "${diffName || 'null'}"
+recorded_at: "${isoTimestamp}"
+absolute_start_time: "${isoTimestamp}"
 absolute_offset_seconds: ${(absoluteStartTime ? absoluteStartTime.getTime() / 1000 : 0).toFixed(3)}
 event_count: ${log.length}
 ---
