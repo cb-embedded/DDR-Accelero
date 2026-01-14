@@ -196,6 +196,7 @@
         
         let isRecording = false;
         let startTime = null;
+        let stopTime = null;
         let absoluteStartTime = null;
         let samples = [];
         let lastUpdateTime = 0;
@@ -217,10 +218,13 @@
             let displayRate = 0;
             if (isRecording) {
                 // During recording, show instantaneous rate (average of accel and gyro)
-                displayRate = (currentAccelRate + currentGyroRate) / 2;
-            } else if (samples.length > 0 && startTime) {
-                // After stopping, show overall average rate
-                const duration = (performance.now() - startTime) / 1000;
+                // Prevent division by zero in initial period
+                if (currentAccelRate > 0 || currentGyroRate > 0) {
+                    displayRate = (currentAccelRate + currentGyroRate) / 2;
+                }
+            } else if (accelSamples.length > 0 && startTime) {
+                // After stopping, show overall average rate based on actual recording duration
+                const duration = stopTime ? (stopTime - startTime) / 1000 : 0;
                 if (duration > 0) {
                     // Use accelerometer count as the primary rate (since both sensors sample at similar rates)
                     displayRate = accelSamples.length / duration;
@@ -401,6 +405,7 @@
             
             samples = [];
             startTime = performance.now();
+            stopTime = null; // Reset stop time for new recording
             absoluteStartTime = new Date();
             lastUpdateTime = startTime;
             accelSampleCount = 0;
@@ -510,6 +515,7 @@
 
         function stopRecording() {
             isRecording = false;
+            stopTime = performance.now(); // Record stop time for accurate duration calculation
             
             // Stop Sensor API if used
             if (usingSensorAPI) {
@@ -573,7 +579,8 @@
                     sample_count: samples.length,
                     accelerometer_count: accelSamples.length,
                     gyroscope_count: gyroSamples.length,
-                    average_sample_rate: duration > 0 ? samples.length / duration : 0
+                    // Use accelerometer count for average rate to match UI calculation
+                    average_sample_rate: duration > 0 ? accelSamples.length / duration : 0
                 },
                 accelerometer: accelSamples,
                 gyroscope: gyroSamples
