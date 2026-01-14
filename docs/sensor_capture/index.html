@@ -383,6 +383,8 @@
             
             // Try to use Sensor API first (higher frequency, better precision)
             usingSensorAPI = false;
+            let sensorError = false;
+            
             if (typeof Accelerometer !== 'undefined' && typeof Gyroscope !== 'undefined') {
                 try {
                     // Create sensors with high frequency
@@ -392,12 +394,23 @@
                     accelerometer.addEventListener('reading', () => handleAccelerometer(accelerometer));
                     gyroscope.addEventListener('reading', () => handleGyroscope(gyroscope));
                     
+                    // Track errors to fall back to DeviceMotion if sensors don't work
                     accelerometer.addEventListener('error', (event) => {
                         console.error('Accelerometer error:', event.error);
+                        if (!sensorError && isRecording) {
+                            sensorError = true;
+                            console.log('Sensor API failed, falling back to DeviceMotion API');
+                            fallbackToDeviceMotion();
+                        }
                     });
                     
                     gyroscope.addEventListener('error', (event) => {
                         console.error('Gyroscope error:', event.error);
+                        if (!sensorError && isRecording) {
+                            sensorError = true;
+                            console.log('Sensor API failed, falling back to DeviceMotion API');
+                            fallbackToDeviceMotion();
+                        }
                     });
                     
                     accelerometer.start();
@@ -422,6 +435,27 @@
             }
             
             durationInterval = setInterval(updateDuration, 100);
+        }
+        
+        function fallbackToDeviceMotion() {
+            if (!isRecording || !usingSensorAPI) return;
+            
+            // Stop Sensor API
+            if (accelerometer) {
+                try { accelerometer.stop(); } catch (e) {}
+                accelerometer = null;
+            }
+            if (gyroscope) {
+                try { gyroscope.stop(); } catch (e) {}
+                gyroscope = null;
+            }
+            
+            usingSensorAPI = false;
+            
+            // Start DeviceMotion API
+            console.log('Now using DeviceMotion API');
+            window.addEventListener('devicemotion', handleMotion);
+            document.getElementById('status').textContent = 'Recording... (DeviceMotion API)';
         }
 
         function stopRecording() {
