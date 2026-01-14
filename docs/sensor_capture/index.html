@@ -191,6 +191,9 @@
     </div>
 
     <script>
+        // Configuration
+        const DESIRED_FREQUENCY = 240; // Hz - request high frequency
+        
         let isRecording = false;
         let startTime = null;
         let absoluteStartTime = null;
@@ -199,6 +202,10 @@
         let sampleCount = 0;
         let currentRate = 0;
         let durationInterval = null;
+        let accelerometer = null;
+        let gyroscope = null;
+        let usingSensorAPI = false;
+        let hasFallenBack = false; // Prevent multiple fallback calls
 
         function updateUI() {
             document.getElementById('sampleRate').textContent = Math.round(currentRate) + ' Hz';
@@ -217,6 +224,50 @@
             }
         }
 
+        // Handler for Sensor API (modern, high-frequency)
+        function handleAccelerometer(reading) {
+            if (!isRecording) return;
+            
+            const now = performance.now();
+            const timestamp = (now - startTime) / 1000;
+            
+            samples.push({
+                type: 'accel',
+                timestamp: timestamp,
+                x: reading.x || 0,
+                y: reading.y || 0,
+                z: reading.z || 0
+            });
+            
+            document.getElementById('accelX').textContent = (reading.x || 0).toFixed(2);
+            document.getElementById('accelY').textContent = (reading.y || 0).toFixed(2);
+            document.getElementById('accelZ').textContent = (reading.z || 0).toFixed(2);
+            
+            updateSampleRate();
+        }
+
+        function handleGyroscope(reading) {
+            if (!isRecording) return;
+            
+            const now = performance.now();
+            const timestamp = (now - startTime) / 1000;
+            
+            samples.push({
+                type: 'gyro',
+                timestamp: timestamp,
+                x: reading.x || 0,
+                y: reading.y || 0,
+                z: reading.z || 0
+            });
+            
+            document.getElementById('gyroX').textContent = (reading.x || 0).toFixed(2);
+            document.getElementById('gyroY').textContent = (reading.y || 0).toFixed(2);
+            document.getElementById('gyroZ').textContent = (reading.z || 0).toFixed(2);
+            
+            updateSampleRate();
+        }
+
+        // Handler for DeviceMotion API (fallback, lower frequency)
         function handleMotion(event) {
             if (!isRecording) return;
             
@@ -255,7 +306,11 @@
                 document.getElementById('gyroZ').textContent = (gyro.alpha || 0).toFixed(2);
             }
             
-            // Calculate sample rate
+            updateSampleRate();
+        }
+
+        function updateSampleRate() {
+            const now = performance.now();
             sampleCount++;
             if (now - lastUpdateTime >= 1000) {
                 currentRate = sampleCount / ((now - lastUpdateTime) / 1000);
@@ -266,15 +321,44 @@
         }
 
         async function requestPermission() {
+            // Request DeviceMotion permission (iOS)
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 try {
                     const permission = await DeviceMotionEvent.requestPermission();
-                    return permission === 'granted';
+                    if (permission !== 'granted') {
+                        return false;
+                    }
                 } catch (error) {
-                    console.error('Permission request failed:', error);
+                    console.error('DeviceMotion permission request failed:', error);
                     return false;
                 }
             }
+            
+            // Request Sensor API permissions (if needed)
+            if (typeof Accelerometer !== 'undefined') {
+                try {
+                    const result = await navigator.permissions.query({ name: 'accelerometer' });
+                    if (result.state === 'denied') {
+                        return false;
+                    }
+                } catch (error) {
+                    // Permission query may not be supported, continue anyway
+                    console.log('Accelerometer permission query not supported:', error);
+                }
+            }
+            
+            if (typeof Gyroscope !== 'undefined') {
+                try {
+                    const result = await navigator.permissions.query({ name: 'gyroscope' });
+                    if (result.state === 'denied') {
+                        return false;
+                    }
+                } catch (error) {
+                    // Permission query may not be supported, continue anyway
+                    console.log('Gyroscope permission query not supported:', error);
+                }
+            }
+            
             return true;
         }
 
@@ -300,14 +384,115 @@
             document.getElementById('toggleBtn').className = 'btn-danger';
             document.getElementById('exportBtn').disabled = true;
             
-            window.addEventListener('devicemotion', handleMotion);
+            // Try to use Sensor API first (higher frequency, better precision)
+            usingSensorAPI = false;
+            hasFallenBack = false;
+            
+            if (typeof Accelerometer !== 'undefined' && typeof Gyroscope !== 'undefined') {
+                try {
+                    // Create sensors with high frequency
+                    // Try with referenceFrame first, fall back without it if not supported
+                    let sensorOptions = { frequency: DESIRED_FREQUENCY };
+                    try {
+                        accelerometer = new Accelerometer({ ...sensorOptions, referenceFrame: 'device' });
+                        gyroscope = new Gyroscope({ ...sensorOptions, referenceFrame: 'device' });
+                    } catch (e) {
+                        console.log('referenceFrame not supported, using default');
+                        accelerometer = new Accelerometer(sensorOptions);
+                        gyroscope = new Gyroscope(sensorOptions);
+                    }
+                    
+                    accelerometer.addEventListener('reading', () => handleAccelerometer(accelerometer));
+                    gyroscope.addEventListener('reading', () => handleGyroscope(gyroscope));
+                    
+                    // Track errors to fall back to DeviceMotion if sensors don't work
+                    accelerometer.addEventListener('error', (event) => {
+                        console.error('Accelerometer error:', event.error);
+                        if (!hasFallenBack && isRecording) {
+                            console.log('Sensor API failed, falling back to DeviceMotion API');
+                            fallbackToDeviceMotion();
+                        }
+                    });
+                    
+                    gyroscope.addEventListener('error', (event) => {
+                        console.error('Gyroscope error:', event.error);
+                        if (!hasFallenBack && isRecording) {
+                            console.log('Sensor API failed, falling back to DeviceMotion API');
+                            fallbackToDeviceMotion();
+                        }
+                    });
+                    
+                    accelerometer.start();
+                    gyroscope.start();
+                    
+                    usingSensorAPI = true;
+                    console.log(`Using Sensor API with ${DESIRED_FREQUENCY} Hz frequency`);
+                    document.getElementById('status').textContent = `Recording... (Sensor API @ ${DESIRED_FREQUENCY}Hz)`;
+                } catch (error) {
+                    console.error('Failed to start Sensor API:', error);
+                    usingSensorAPI = false;
+                    accelerometer = null;
+                    gyroscope = null;
+                }
+            }
+            
+            // Fall back to DeviceMotion API if Sensor API not available
+            if (!usingSensorAPI) {
+                console.log('Using DeviceMotion API (fallback)');
+                window.addEventListener('devicemotion', handleMotion);
+                document.getElementById('status').textContent = 'Recording... (DeviceMotion API)';
+            }
             
             durationInterval = setInterval(updateDuration, 100);
+        }
+        
+        function fallbackToDeviceMotion() {
+            if (!isRecording || !usingSensorAPI || hasFallenBack) return;
+            
+            hasFallenBack = true; // Prevent multiple calls
+            
+            // Stop Sensor API
+            if (accelerometer) {
+                try { 
+                    accelerometer.stop(); 
+                } catch (e) {
+                    console.log('Error stopping accelerometer:', e);
+                }
+                accelerometer = null;
+            }
+            if (gyroscope) {
+                try { 
+                    gyroscope.stop(); 
+                } catch (e) {
+                    console.log('Error stopping gyroscope:', e);
+                }
+                gyroscope = null;
+            }
+            
+            usingSensorAPI = false;
+            
+            // Start DeviceMotion API
+            console.log('Now using DeviceMotion API');
+            window.addEventListener('devicemotion', handleMotion);
+            document.getElementById('status').textContent = 'Recording... (DeviceMotion API)';
         }
 
         function stopRecording() {
             isRecording = false;
-            window.removeEventListener('devicemotion', handleMotion);
+            
+            // Stop Sensor API if used
+            if (usingSensorAPI) {
+                if (accelerometer) {
+                    accelerometer.stop();
+                    accelerometer = null;
+                }
+                if (gyroscope) {
+                    gyroscope.stop();
+                    gyroscope = null;
+                }
+            } else {
+                window.removeEventListener('devicemotion', handleMotion);
+            }
             
             if (durationInterval) {
                 clearInterval(durationInterval);
@@ -388,13 +573,27 @@
 
         document.getElementById('exportBtn').addEventListener('click', exportData);
 
-        // Check if DeviceMotionEvent is available
-        if (typeof DeviceMotionEvent === 'undefined') {
+        // Check sensor capabilities and display info
+        if (typeof DeviceMotionEvent === 'undefined' && typeof Accelerometer === 'undefined') {
             document.getElementById('status').textContent = 'Motion sensors not available';
             document.getElementById('status').className = 'status idle';
             document.getElementById('toggleBtn').disabled = true;
-        } else if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            document.getElementById('permissionWarning').style.display = 'block';
+        } else {
+            // Show which APIs are available
+            const apis = [];
+            if (typeof Accelerometer !== 'undefined' && typeof Gyroscope !== 'undefined') {
+                apis.push('Sensor API (high-freq)');
+            }
+            if (typeof DeviceMotionEvent !== 'undefined') {
+                apis.push('DeviceMotion API');
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    document.getElementById('permissionWarning').style.display = 'block';
+                }
+            }
+            
+            if (apis.length > 0) {
+                console.log('Available sensor APIs:', apis.join(', '));
+            }
         }
     </script>
 </body>
