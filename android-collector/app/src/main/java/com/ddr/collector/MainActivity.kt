@@ -17,8 +17,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import co.nstant.in.cbor.CborBuilder
-import co.nstant.in.cbor.CborEncoder
+import co.nstant.`in`.cbor.CborBuilder
+import co.nstant.`in`.cbor.CborEncoder
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
