@@ -196,11 +196,14 @@
         
         let isRecording = false;
         let startTime = null;
+        let stopTime = null;
         let absoluteStartTime = null;
         let samples = [];
         let lastUpdateTime = 0;
-        let sampleCount = 0;
-        let currentRate = 0;
+        let accelSampleCount = 0;
+        let gyroSampleCount = 0;
+        let currentAccelRate = 0;
+        let currentGyroRate = 0;
         let durationInterval = null;
         let accelerometer = null;
         let gyroscope = null;
@@ -208,11 +211,28 @@
         let hasFallenBack = false; // Prevent multiple fallback calls
 
         function updateUI() {
-            document.getElementById('sampleRate').textContent = Math.round(currentRate) + ' Hz';
-            
+            // Calculate overall average sample rate based on actual duration
             const accelSamples = samples.filter(s => s.type === 'accel');
             const gyroSamples = samples.filter(s => s.type === 'gyro');
             
+            let displayRate = 0;
+            if (isRecording) {
+                // During recording, show instantaneous rate (average of accel and gyro)
+                // Prevent division by zero in initial period
+                if (currentAccelRate > 0 || currentGyroRate > 0) {
+                    displayRate = (currentAccelRate + currentGyroRate) / 2;
+                }
+            } else if (accelSamples.length > 0 && startTime) {
+                // After stopping, show overall average rate based on actual recording duration
+                const duration = stopTime ? (stopTime - startTime) / 1000 : 0;
+                if (duration > 0) {
+                    // Use accelerometer as primary rate since it represents the actual sensor sampling frequency
+                    // (gyroscope samples at similar rate but may have slight variations)
+                    displayRate = accelSamples.length / duration;
+                }
+            }
+            
+            document.getElementById('sampleRate').textContent = Math.round(displayRate) + ' Hz';
             document.getElementById('accelCount').textContent = accelSamples.length;
             document.getElementById('gyroCount').textContent = gyroSamples.length;
         }
@@ -243,7 +263,7 @@
             document.getElementById('accelY').textContent = (reading.y || 0).toFixed(2);
             document.getElementById('accelZ').textContent = (reading.z || 0).toFixed(2);
             
-            updateSampleRate();
+            updateSampleRate('accel');
         }
 
         function handleGyroscope(reading) {
@@ -264,7 +284,7 @@
             document.getElementById('gyroY').textContent = (reading.y || 0).toFixed(2);
             document.getElementById('gyroZ').textContent = (reading.z || 0).toFixed(2);
             
-            updateSampleRate();
+            updateSampleRate('gyro');
         }
 
         // Handler for DeviceMotion API (fallback, lower frequency)
@@ -274,9 +294,11 @@
             const now = performance.now();
             const timestamp = (now - startTime) / 1000;
             
-            // Accelerometer data (with gravity)
-            if (event.accelerationIncludingGravity) {
-                const accel = event.accelerationIncludingGravity;
+            // Accelerometer data (prefer acceleration without gravity for better precision)
+            // event.acceleration excludes gravity, providing more precise motion data
+            // event.accelerationIncludingGravity includes gravity as fallback
+            const accel = event.acceleration || event.accelerationIncludingGravity;
+            if (accel) {
                 samples.push({
                     type: 'accel',
                     timestamp: timestamp,
@@ -288,6 +310,8 @@
                 document.getElementById('accelX').textContent = (accel.x || 0).toFixed(2);
                 document.getElementById('accelY').textContent = (accel.y || 0).toFixed(2);
                 document.getElementById('accelZ').textContent = (accel.z || 0).toFixed(2);
+                
+                updateSampleRate('accel');
             }
             
             // Gyroscope data (rotation rate)
@@ -304,17 +328,29 @@
                 document.getElementById('gyroX').textContent = (gyro.beta || 0).toFixed(2);
                 document.getElementById('gyroY').textContent = (gyro.gamma || 0).toFixed(2);
                 document.getElementById('gyroZ').textContent = (gyro.alpha || 0).toFixed(2);
+                
+                updateSampleRate('gyro');
             }
-            
-            updateSampleRate();
         }
 
-        function updateSampleRate() {
+        function updateSampleRate(sensorType) {
             const now = performance.now();
-            sampleCount++;
+            
+            // Count samples separately for each sensor type
+            if (sensorType === 'accel') {
+                accelSampleCount++;
+            } else if (sensorType === 'gyro') {
+                gyroSampleCount++;
+            }
+            
+            // Update rates every second
             if (now - lastUpdateTime >= 1000) {
-                currentRate = sampleCount / ((now - lastUpdateTime) / 1000);
-                sampleCount = 0;
+                const elapsed = (now - lastUpdateTime) / 1000;
+                currentAccelRate = accelSampleCount / elapsed;
+                currentGyroRate = gyroSampleCount / elapsed;
+                
+                accelSampleCount = 0;
+                gyroSampleCount = 0;
                 lastUpdateTime = now;
                 updateUI();
             }
@@ -372,10 +408,13 @@
             
             samples = [];
             startTime = performance.now();
+            stopTime = null; // Reset stop time for new recording
             absoluteStartTime = new Date();
             lastUpdateTime = startTime;
-            sampleCount = 0;
-            currentRate = 0;
+            accelSampleCount = 0;
+            gyroSampleCount = 0;
+            currentAccelRate = 0;
+            currentGyroRate = 0;
             isRecording = true;
             
             document.getElementById('status').textContent = 'Recording...';
@@ -479,6 +518,7 @@
 
         function stopRecording() {
             isRecording = false;
+            stopTime = performance.now(); // Record stop time for accurate duration calculation
             
             // Stop Sensor API if used
             if (usingSensorAPI) {
@@ -500,6 +540,7 @@
             }
             
             updateDuration();
+            updateUI(); // Update UI one final time with overall average
             
             document.getElementById('status').textContent = 'Stopped - ' + samples.length + ' samples collected';
             document.getElementById('status').className = 'status idle';
@@ -541,7 +582,8 @@
                     sample_count: samples.length,
                     accelerometer_count: accelSamples.length,
                     gyroscope_count: gyroSamples.length,
-                    average_sample_rate: duration > 0 ? samples.length / duration : 0
+                    // Use accelerometer count for average rate to match UI calculation
+                    average_sample_rate: duration > 0 ? accelSamples.length / duration : 0
                 },
                 accelerometer: accelSamples,
                 gyroscope: gyroSamples
