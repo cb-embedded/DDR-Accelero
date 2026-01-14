@@ -51,6 +51,37 @@
         .recording {
             background: #ffebee !important;
         }
+        .metadata-form {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        .form-group label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+        .form-group input,
+        .form-group select {
+            padding: 5px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .form-group input[type="text"] {
+            width: 300px;
+        }
+        .difficulty-group {
+            display: inline-block;
+        }
+        .difficulty-group select {
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -65,6 +96,40 @@
         <div class="btn-display" id="btn3">↓</div>
     </div>
     
+    <div class="metadata-form">
+        <h3>Metadata</h3>
+        <div class="form-group">
+            <label for="musicName">Music Name:</label>
+            <input type="text" id="musicName" placeholder="Enter music name">
+        </div>
+        <div class="form-group">
+            <label for="difficultyLevel">Difficulty:</label>
+            <div class="difficulty-group">
+                <select id="difficultyNumber">
+                    <option value="">-</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+                <select id="difficultyName">
+                    <option value="">-</option>
+                    <option value="Easy">Easy</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Hard">Hard</option>
+                    <option value="Expert">Expert</option>
+                    <option value="Challenge">Challenge</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
     <div>
         <button id="recordBtn">Start Recording</button>
         <button id="exportBtn">Export Log</button>
@@ -76,6 +141,7 @@
         let recording = false;
         let log = [];
         let startTime = null;
+        let absoluteStartTime = null;
         let buttonStates = [false, false, false, false];
         const btnNames = ['LEFT', 'RIGHT', 'UP', 'DOWN'];
         let lastGamepadId = null;
@@ -139,6 +205,7 @@
             if (recording) {
                 log = [];
                 startTime = performance.now();
+                absoluteStartTime = new Date();
                 btn.textContent = 'Stop Recording';
                 status.classList.add('recording');
                 document.getElementById('eventCount').textContent = '0';
@@ -154,15 +221,72 @@
                 return;
             }
             
-            const content = log.map(e => 
+            // Get metadata
+            const musicName = document.getElementById('musicName').value.trim() || 'Unknown';
+            const diffNumber = document.getElementById('difficultyNumber').value;
+            const diffName = document.getElementById('difficultyName').value;
+            
+            // Format difficulty string
+            let difficultyStr = '';
+            if (diffNumber && diffName) {
+                difficultyStr = `${diffNumber}_${diffName}`;
+            } else if (diffNumber) {
+                difficultyStr = diffNumber;
+            } else if (diffName) {
+                difficultyStr = diffName;
+            }
+            
+            // Format timestamp for filename (YYYY-MM-DD_HH-MM-SS)
+            const now = absoluteStartTime || new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const timestampStr = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+            
+            // Format timestamp for YAML (ISO 8601)
+            const isoTimestamp = now.toISOString();
+            const absoluteOffsetSeconds = absoluteStartTime ? (absoluteStartTime.getTime() / 1000).toFixed(3) : 'null';
+            
+            // Sanitize music name for filename (replace special chars with underscores)
+            const sanitizedMusicName = musicName.replace(/[^a-zA-Z0-9_-]/g, '_');
+            
+            // Build filename
+            let filename = timestampStr;
+            if (sanitizedMusicName) {
+                filename += `_${sanitizedMusicName}`;
+            }
+            if (difficultyStr) {
+                filename += `_(${difficultyStr})`;
+            }
+            filename += '.csv';
+            
+            // Create YAML frontmatter
+            const yamlHeader = `---
+music_name: "${musicName}"
+difficulty_number: ${diffNumber || 'null'}
+difficulty_name: ${diffName ? `"${diffName}"` : 'null'}
+recorded_at: "${isoTimestamp}"
+absolute_start_time: "${isoTimestamp}"
+absolute_offset_seconds: ${absoluteOffsetSeconds}
+event_count: ${log.length}
+---
+`;
+            
+            // Create CSV content
+            const csvContent = log.map(e => 
                 `${e.timestamp},${e.button},${e.pressed ? '1' : '0'}`
             ).join('\n');
             
-            const blob = new Blob(['timestamp,button,pressed\n' + content], { type: 'text/csv' });
+            const fullContent = yamlHeader + 'timestamp,button,pressed\n' + csvContent;
+            
+            const blob = new Blob([fullContent], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `gamepad_log_${Date.now()}.csv`;
+            a.download = filename;
             a.click();
             URL.revokeObjectURL(url);
         });
