@@ -169,7 +169,7 @@ class SensorRecordingService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
         if (!isRecording) return
 
-        val timestamp = System.nanoTime()
+        val timestamp = event.timestamp
 
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
