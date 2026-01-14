@@ -1,14 +1,14 @@
 package com.ddr.collector
 
 import android.Manifest
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -17,37 +17,37 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import co.nstant.`in`.cbor.CborBuilder
-import co.nstant.`in`.cbor.CborEncoder
 import java.io.File
-import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.*
 
-class MainActivity : AppCompatActivity(), SensorEventListener {
-    private lateinit var sensorManager: SensorManager
-    private var accelerometer: Sensor? = null
-    private var gyroscope: Sensor? = null
-    private var isRecording = false
-    private val sensorData = mutableListOf<SensorSample>()
-    private var lastFramerateUpdate = 0L
-    private var frameCount = 0
-    private var currentFramerate = 0f
+class MainActivity : AppCompatActivity() {
+    private var sensorService: SensorRecordingService? = null
+    private var serviceBound = false
     private lateinit var framerateText: TextView
     private lateinit var toggleButton: Button
     private lateinit var downloadButton: Button
     private lateinit var shareButton: Button
     private var lastFile: File? = null
 
-    data class SensorSample(
-        val timestamp: Long,
-        val accelX: Float?,
-        val accelY: Float?,
-        val accelZ: Float?,
-        val gyroX: Float?,
-        val gyroY: Float?,
-        val gyroZ: Float?
-    )
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val localBinder = binder as SensorRecordingService.LocalBinder
+            sensorService = localBinder.getService()
+            serviceBound = true
+            
+            sensorService?.setFramerateCallback { framerate ->
+                runOnUiThread {
+                    framerateText.text = "Framerate: %.1f Hz".format(framerate)
+                }
+            }
+            
+            updateUIState()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            sensorService = null
+            serviceBound = false
+        }
+    }
 
     private val saveFileLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/cbor")
@@ -62,6 +62,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(this, 
+                "Notification permission needed for background recording", 
+                Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -71,15 +81,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         downloadButton = findViewById(R.id.downloadButton)
         shareButton = findViewById(R.id.shareButton)
 
-        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            checkPermissions()
-        }
+        checkPermissions()
 
         toggleButton.setOnClickListener {
+            val isRecording = sensorService?.isRecording() == true
             if (isRecording) stopRecording() else startRecording()
         }
 
@@ -87,26 +92,28 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         shareButton.setOnClickListener { shareFile() }
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (isRecording) {
-            sensorManager.unregisterListener(this)
-        }
+    override fun onStart() {
+        super.onStart()
+        val intent = Intent(this, SensorRecordingService::class.java)
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (isRecording) {
-            accelerometer?.let {
-                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
-            }
-            gyroscope?.let {
-                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
-            }
+    override fun onStop() {
+        super.onStop()
+        if (serviceBound) {
+            unbindService(serviceConnection)
+            serviceBound = false
         }
     }
 
     private fun checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.HIGH_SAMPLING_RATE_SENSORS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -117,117 +124,47 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun startRecording() {
-        sensorData.clear()
-        frameCount = 0
-        lastFramerateUpdate = System.currentTimeMillis()
-
-        accelerometer?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
+        val intent = Intent(this, SensorRecordingService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
-        gyroscope?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
-        }
-
-        isRecording = true
-        toggleButton.text = "Stop Recording"
-        downloadButton.isEnabled = false
-        shareButton.isEnabled = false
+        
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        
+        updateUIState()
     }
 
     private fun stopRecording() {
-        sensorManager.unregisterListener(this)
-        isRecording = false
-        toggleButton.text = "Start Recording"
-
-        if (sensorData.isNotEmpty()) {
-            saveDataToCbor()
-            downloadButton.isEnabled = true
-            shareButton.isEnabled = true
+        sensorService?.let { service ->
+            lastFile = service.stopRecording()
+            
+            if (lastFile != null) {
+                Toast.makeText(this, "Saved: ${lastFile?.name}", Toast.LENGTH_SHORT).show()
+                downloadButton.isEnabled = true
+                shareButton.isEnabled = true
+            }
         }
+        
+        stopService(Intent(this, SensorRecordingService::class.java))
+        
+        updateUIState()
     }
 
-    override fun onSensorChanged(event: SensorEvent) {
-        if (!isRecording) return
-
-        val timestamp = System.nanoTime()
-
-        when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> {
-                sensorData.add(SensorSample(
-                    timestamp,
-                    event.values[0], event.values[1], event.values[2],
-                    null, null, null
-                ))
-            }
-            Sensor.TYPE_GYROSCOPE -> {
-                sensorData.add(SensorSample(
-                    timestamp,
-                    null, null, null,
-                    event.values[0], event.values[1], event.values[2]
-                ))
+    private fun updateUIState() {
+        val isRecording = sensorService?.isRecording() == true
+        toggleButton.text = if (isRecording) "Stop Recording" else "Start Recording"
+        downloadButton.isEnabled = !isRecording && lastFile != null
+        shareButton.isEnabled = !isRecording && lastFile != null
+        
+        if (!isRecording) {
+            lastFile = sensorService?.getLastFile()
+            if (lastFile != null) {
+                downloadButton.isEnabled = true
+                shareButton.isEnabled = true
             }
         }
-
-        frameCount++
-        val now = System.currentTimeMillis()
-        if (now - lastFramerateUpdate >= 1000) {
-            currentFramerate = frameCount / ((now - lastFramerateUpdate) / 1000f)
-            runOnUiThread {
-                framerateText.text = "Framerate: %.1f Hz".format(currentFramerate)
-            }
-            frameCount = 0
-            lastFramerateUpdate = now
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    private fun saveDataToCbor() {
-        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        val filename = "sensor_data_$timestamp.cbor"
-        val file = File(filesDir, filename)
-        lastFile = file
-
-        val accelSamples = sensorData.filter { it.accelX != null }
-        val gyroSamples = sensorData.filter { it.gyroX != null }
-
-        FileOutputStream(file).use { fos ->
-            val builder = CborBuilder()
-            val map = builder.addMap()
-            
-            map.put("device", Build.MODEL)
-            map.put("timestamp", timestamp)
-            map.put("accelerometer_count", accelSamples.size.toLong())
-            map.put("gyroscope_count", gyroSamples.size.toLong())
-            
-            val accelArray = map.putArray("accelerometer")
-            accelSamples.forEach { sample ->
-                val sampleMap = accelArray.addMap()
-                sampleMap.put("timestamp", sample.timestamp)
-                sampleMap.put("x", sample.accelX!!.toDouble())
-                sampleMap.put("y", sample.accelY!!.toDouble())
-                sampleMap.put("z", sample.accelZ!!.toDouble())
-                sampleMap.end()
-            }
-            accelArray.end()
-            
-            val gyroArray = map.putArray("gyroscope")
-            gyroSamples.forEach { sample ->
-                val sampleMap = gyroArray.addMap()
-                sampleMap.put("timestamp", sample.timestamp)
-                sampleMap.put("x", sample.gyroX!!.toDouble())
-                sampleMap.put("y", sample.gyroY!!.toDouble())
-                sampleMap.put("z", sample.gyroZ!!.toDouble())
-                sampleMap.end()
-            }
-            gyroArray.end()
-            
-            map.end()
-            
-            CborEncoder(fos).encode(builder.build())
-        }
-
-        Toast.makeText(this, "Saved: $filename", Toast.LENGTH_SHORT).show()
     }
 
     private fun downloadFile() {
