@@ -4,7 +4,9 @@ Web-based accelerometer and gyroscope data capture directly from mobile phone br
 
 ## Features
 
-- **Maximum sampling rate**: Uses browser's `devicemotion` event for highest available sampling rate
+- **High-frequency sampling**: Uses modern Sensor API (Accelerometer/Gyroscope) with up to 240Hz sampling rate when available
+- **Automatic fallback**: Falls back to DeviceMotion API (~60Hz) on older devices
+- **Enhanced precision**: Full floating-point precision maintained in captured data
 - **Real-time display**: Shows current sensor values and sample rate
 - **Metadata preservation**: Captures absolute timestamps for accurate reconstruction
 - **Simple export**: Download data as JSON with one click
@@ -81,19 +83,36 @@ Exported JSON structure:
 
 ## Browser Compatibility
 
+### Sensor API (High Frequency - Up to 240Hz)
+- **Chrome/Edge 91+**: Full support on Android
+- **Chrome/Edge on Desktop**: Support varies by hardware
+- **Safari**: Limited support (iOS 14.5+ on some models)
+
+### DeviceMotion API (Fallback - ~60Hz)
 - **iOS Safari**: Requires iOS 13+ and user permission
 - **Android Chrome**: Works on Android 4.4+
 - **Other browsers**: Most modern mobile browsers support DeviceMotionEvent
 
+The app automatically detects available APIs and uses the best option.
+
 ## Typical Sample Rates
 
-- **Android**: 100-200 Hz (varies by device)
-- **iOS**: 50-100 Hz (varies by device)
+### With Sensor API (Modern Devices)
+- **Android Chrome/Edge**: 200-240 Hz (near requested frequency)
+- **Desktop Chrome/Edge**: 100-200 Hz (varies by hardware)
+- **iOS Safari**: Limited availability, varies by model
+
+### With DeviceMotion API (Fallback)
+- **Android**: 60-120 Hz (device dependent)
+- **iOS**: 50-100 Hz (device dependent)
 - **Desktop**: May not have motion sensors
 
 ## Notes
 
+- The app prioritizes Sensor API for higher frequency (up to 240Hz) and better precision
+- Automatically falls back to DeviceMotion API if Sensor API is unavailable
+- Full floating-point precision is maintained throughout capture and export
 - Accelerometer data includes gravity (use `accelerationIncludingGravity`)
 - Higher sampling rates drain battery faster
 - Keep phone screen on during recording
-- Export file size grows with recording duration (~1 KB per second)
+- Export file size grows with recording duration (~1 KB per second at 60Hz, ~4 KB/s at 240Hz)
