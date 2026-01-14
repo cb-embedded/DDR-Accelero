@@ -75,7 +75,9 @@ Exported JSON structure:
 - **Accelerometer**: Linear acceleration including gravity (m/s²)
   - `x`, `y`, `z`: Acceleration along each axis
 - **Gyroscope**: Rotation rate (deg/s)
-  - `x`, `y`, `z`: Rotation rate around each axis (alpha, beta, gamma)
+  - `x`: Rotation around X axis (beta)
+  - `y`: Rotation around Y axis (gamma)
+  - `z`: Rotation around Z axis (alpha)
 
 ## Browser Compatibility
 

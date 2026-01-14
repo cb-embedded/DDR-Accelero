@@ -245,14 +245,14 @@
                 samples.push({
                     type: 'gyro',
                     timestamp: timestamp,
-                    x: gyro.alpha || 0,
-                    y: gyro.beta || 0,
-                    z: gyro.gamma || 0
+                    x: gyro.beta || 0,
+                    y: gyro.gamma || 0,
+                    z: gyro.alpha || 0
                 });
                 
-                document.getElementById('gyroX').textContent = (gyro.alpha || 0).toFixed(2);
-                document.getElementById('gyroY').textContent = (gyro.beta || 0).toFixed(2);
-                document.getElementById('gyroZ').textContent = (gyro.gamma || 0).toFixed(2);
+                document.getElementById('gyroX').textContent = (gyro.beta || 0).toFixed(2);
+                document.getElementById('gyroY').textContent = (gyro.gamma || 0).toFixed(2);
+                document.getElementById('gyroZ').textContent = (gyro.alpha || 0).toFixed(2);
             }
             
             // Calculate sample rate
