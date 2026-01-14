@@ -289,9 +289,9 @@
             const now = performance.now();
             const timestamp = (now - startTime) / 1000;
             
-            // Accelerometer data (with gravity)
-            if (event.accelerationIncludingGravity) {
-                const accel = event.accelerationIncludingGravity;
+            // Accelerometer data (prefer acceleration without gravity for better precision)
+            const accel = event.acceleration || event.accelerationIncludingGravity;
+            if (accel) {
                 samples.push({
                     type: 'accel',
                     timestamp: timestamp,
