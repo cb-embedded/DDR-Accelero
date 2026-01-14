@@ -356,7 +356,7 @@
                     sample_count: samples.length,
                     accelerometer_count: accelSamples.length,
                     gyroscope_count: gyroSamples.length,
-                    average_sample_rate: samples.length / duration
+                    average_sample_rate: duration > 0 ? samples.length / duration : 0
                 },
                 accelerometer: accelSamples,
                 gyroscope: gyroSamples
