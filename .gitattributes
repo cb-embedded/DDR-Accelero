@@ -1,0 +1,37 @@
+# Ensure binary files are treated as binary and not modified during checkout
+*.jar binary
+*.apk binary
+*.so binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.7z binary
+*.rar binary
+*.ttf binary
+*.eot binary
+*.woff binary
+*.woff2 binary
+
+# Ensure text files use LF line endings on checkout
+*.java text eol=lf
+*.kt text eol=lf
+*.xml text eol=lf
+*.gradle text eol=lf
+*.properties text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+
+# Shell scripts should use LF line endings
+*.sh text eol=lf
+gradlew text eol=lf
