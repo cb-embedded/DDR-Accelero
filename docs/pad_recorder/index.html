@@ -248,6 +248,7 @@
             
             // Format timestamp for YAML (ISO 8601)
             const isoTimestamp = now.toISOString();
+            const absoluteOffsetSeconds = absoluteStartTime ? (absoluteStartTime.getTime() / 1000).toFixed(3) : 'null';
             
             // Sanitize music name for filename (replace special chars with underscores)
             const sanitizedMusicName = musicName.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -266,10 +267,10 @@
             const yamlHeader = `---
 music_name: "${musicName}"
 difficulty_number: ${diffNumber || 'null'}
-difficulty_name: "${diffName || 'null'}"
+difficulty_name: ${diffName ? `"${diffName}"` : 'null'}
 recorded_at: "${isoTimestamp}"
 absolute_start_time: "${isoTimestamp}"
-absolute_offset_seconds: ${(absoluteStartTime ? absoluteStartTime.getTime() / 1000 : 0).toFixed(3)}
+absolute_offset_seconds: ${absoluteOffsetSeconds}
 event_count: ${log.length}
 ---
 `;
