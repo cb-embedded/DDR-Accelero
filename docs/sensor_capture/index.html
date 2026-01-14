@@ -226,7 +226,8 @@
                 // After stopping, show overall average rate based on actual recording duration
                 const duration = stopTime ? (stopTime - startTime) / 1000 : 0;
                 if (duration > 0) {
-                    // Use accelerometer count as the primary rate (since both sensors sample at similar rates)
+                    // Use accelerometer as primary rate since it represents the actual sensor sampling frequency
+                    // (gyroscope samples at similar rate but may have slight variations)
                     displayRate = accelSamples.length / duration;
                 }
             }
@@ -294,6 +295,8 @@
             const timestamp = (now - startTime) / 1000;
             
             // Accelerometer data (prefer acceleration without gravity for better precision)
+            // event.acceleration excludes gravity, providing more precise motion data
+            // event.accelerationIncludingGravity includes gravity as fallback
             const accel = event.acceleration || event.accelerationIncludingGravity;
             if (accel) {
                 samples.push({
