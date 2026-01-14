@@ -81,7 +81,9 @@ class SensorRecordingService : Service(), SensorEventListener {
     override fun onDestroy() {
         super.onDestroy()
         stopRecording()
-        wakeLock?.release()
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
     }
 
     private fun createNotificationChannel() {
@@ -129,7 +131,7 @@ class SensorRecordingService : Service(), SensorEventListener {
         frameCount = 0
         lastFramerateUpdate = System.currentTimeMillis()
         
-        wakeLock?.acquire()
+        wakeLock?.acquire(60 * 60 * 1000L) // 1 hour timeout
         
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
@@ -147,7 +149,9 @@ class SensorRecordingService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         isRecording = false
         
-        wakeLock?.release()
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
         
         if (sensorData.isNotEmpty()) {
             saveDataToCbor()

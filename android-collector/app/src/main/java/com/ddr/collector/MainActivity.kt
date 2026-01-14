@@ -131,7 +131,9 @@ class MainActivity : AppCompatActivity() {
             startService(intent)
         }
         
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        if (!serviceBound) {
+            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        }
         
         updateUIState()
     }
