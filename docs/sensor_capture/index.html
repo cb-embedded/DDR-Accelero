@@ -199,8 +199,10 @@
         let absoluteStartTime = null;
         let samples = [];
         let lastUpdateTime = 0;
-        let sampleCount = 0;
-        let currentRate = 0;
+        let accelSampleCount = 0;
+        let gyroSampleCount = 0;
+        let currentAccelRate = 0;
+        let currentGyroRate = 0;
         let durationInterval = null;
         let accelerometer = null;
         let gyroscope = null;
@@ -208,11 +210,24 @@
         let hasFallenBack = false; // Prevent multiple fallback calls
 
         function updateUI() {
-            document.getElementById('sampleRate').textContent = Math.round(currentRate) + ' Hz';
-            
+            // Calculate overall average sample rate based on actual duration
             const accelSamples = samples.filter(s => s.type === 'accel');
             const gyroSamples = samples.filter(s => s.type === 'gyro');
             
+            let displayRate = 0;
+            if (isRecording) {
+                // During recording, show instantaneous rate (average of accel and gyro)
+                displayRate = (currentAccelRate + currentGyroRate) / 2;
+            } else if (samples.length > 0 && startTime) {
+                // After stopping, show overall average rate
+                const duration = (performance.now() - startTime) / 1000;
+                if (duration > 0) {
+                    // Use accelerometer count as the primary rate (since both sensors sample at similar rates)
+                    displayRate = accelSamples.length / duration;
+                }
+            }
+            
+            document.getElementById('sampleRate').textContent = Math.round(displayRate) + ' Hz';
             document.getElementById('accelCount').textContent = accelSamples.length;
             document.getElementById('gyroCount').textContent = gyroSamples.length;
         }
@@ -243,7 +258,7 @@
             document.getElementById('accelY').textContent = (reading.y || 0).toFixed(2);
             document.getElementById('accelZ').textContent = (reading.z || 0).toFixed(2);
             
-            updateSampleRate();
+            updateSampleRate('accel');
         }
 
         function handleGyroscope(reading) {
@@ -264,7 +279,7 @@
             document.getElementById('gyroY').textContent = (reading.y || 0).toFixed(2);
             document.getElementById('gyroZ').textContent = (reading.z || 0).toFixed(2);
             
-            updateSampleRate();
+            updateSampleRate('gyro');
         }
 
         // Handler for DeviceMotion API (fallback, lower frequency)
@@ -288,6 +303,8 @@
                 document.getElementById('accelX').textContent = (accel.x || 0).toFixed(2);
                 document.getElementById('accelY').textContent = (accel.y || 0).toFixed(2);
                 document.getElementById('accelZ').textContent = (accel.z || 0).toFixed(2);
+                
+                updateSampleRate('accel');
             }
             
             // Gyroscope data (rotation rate)
@@ -304,17 +321,29 @@
                 document.getElementById('gyroX').textContent = (gyro.beta || 0).toFixed(2);
                 document.getElementById('gyroY').textContent = (gyro.gamma || 0).toFixed(2);
                 document.getElementById('gyroZ').textContent = (gyro.alpha || 0).toFixed(2);
+                
+                updateSampleRate('gyro');
             }
-            
-            updateSampleRate();
         }
 
-        function updateSampleRate() {
+        function updateSampleRate(sensorType) {
             const now = performance.now();
-            sampleCount++;
+            
+            // Count samples separately for each sensor type
+            if (sensorType === 'accel') {
+                accelSampleCount++;
+            } else if (sensorType === 'gyro') {
+                gyroSampleCount++;
+            }
+            
+            // Update rates every second
             if (now - lastUpdateTime >= 1000) {
-                currentRate = sampleCount / ((now - lastUpdateTime) / 1000);
-                sampleCount = 0;
+                const elapsed = (now - lastUpdateTime) / 1000;
+                currentAccelRate = accelSampleCount / elapsed;
+                currentGyroRate = gyroSampleCount / elapsed;
+                
+                accelSampleCount = 0;
+                gyroSampleCount = 0;
                 lastUpdateTime = now;
                 updateUI();
             }
@@ -374,8 +403,10 @@
             startTime = performance.now();
             absoluteStartTime = new Date();
             lastUpdateTime = startTime;
-            sampleCount = 0;
-            currentRate = 0;
+            accelSampleCount = 0;
+            gyroSampleCount = 0;
+            currentAccelRate = 0;
+            currentGyroRate = 0;
             isRecording = true;
             
             document.getElementById('status').textContent = 'Recording...';
@@ -500,6 +531,7 @@
             }
             
             updateDuration();
+            updateUI(); // Update UI one final time with overall average
             
             document.getElementById('status').textContent = 'Stopped - ' + samples.length + ' samples collected';
             document.getElementById('status').className = 'status idle';
