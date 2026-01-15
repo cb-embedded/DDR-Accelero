@@ -10,7 +10,7 @@
         android:id="@+id/framerateText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Framerate: 0 Hz"
+        android:text="Accel: 0 Hz, Gyro: 0 Hz"
         android:textSize="24sp"
         android:layout_marginBottom="32dp" />
 

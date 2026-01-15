@@ -28,14 +28,16 @@ class SensorRecordingService : Service(), SensorEventListener {
     private var gyroscope: Sensor? = null
     private val sensorData = mutableListOf<SensorSample>()
     private var lastFramerateUpdate = 0L
-    private var frameCount = 0
-    private var currentFramerate = 0f
+    private var accelFrameCount = 0
+    private var gyroFrameCount = 0
+    private var currentAccelFramerate = 0f
+    private var currentGyroFramerate = 0f
     private var wakeLock: PowerManager.WakeLock? = null
     private var isRecording = false
     private var lastFile: File? = null
     
     private val binder = LocalBinder()
-    private var framerateCallback: ((Float) -> Unit)? = null
+    private var framerateCallback: ((Float, Float) -> Unit)? = null
 
     data class SensorSample(
         val timestamp: Long,
@@ -128,7 +130,8 @@ class SensorRecordingService : Service(), SensorEventListener {
         if (isRecording) return
         
         sensorData.clear()
-        frameCount = 0
+        accelFrameCount = 0
+        gyroFrameCount = 0
         lastFramerateUpdate = System.currentTimeMillis()
         
         wakeLock?.acquire(60 * 60 * 1000L) // 1 hour timeout
@@ -162,7 +165,7 @@ class SensorRecordingService : Service(), SensorEventListener {
 
     fun isRecording(): Boolean = isRecording
 
-    fun setFramerateCallback(callback: (Float) -> Unit) {
+    fun setFramerateCallback(callback: (Float, Float) -> Unit) {
         framerateCallback = callback
     }
 
@@ -178,6 +181,7 @@ class SensorRecordingService : Service(), SensorEventListener {
                     event.values[0], event.values[1], event.values[2],
                     null, null, null
                 ))
+                accelFrameCount++
             }
             Sensor.TYPE_GYROSCOPE -> {
                 sensorData.add(SensorSample(
@@ -185,18 +189,21 @@ class SensorRecordingService : Service(), SensorEventListener {
                     null, null, null,
                     event.values[0], event.values[1], event.values[2]
                 ))
+                gyroFrameCount++
             }
         }
 
-        frameCount++
         val now = System.currentTimeMillis()
         if (now - lastFramerateUpdate >= 1000) {
-            currentFramerate = frameCount / ((now - lastFramerateUpdate) / 1000f)
-            framerateCallback?.invoke(currentFramerate)
+            val elapsedSeconds = (now - lastFramerateUpdate) / 1000f
+            currentAccelFramerate = accelFrameCount / elapsedSeconds
+            currentGyroFramerate = gyroFrameCount / elapsedSeconds
+            framerateCallback?.invoke(currentAccelFramerate, currentGyroFramerate)
             
-            updateNotification("Recording: %.1f Hz".format(currentFramerate))
+            updateNotification("Accel: %.0f Hz, Gyro: %.0f Hz".format(currentAccelFramerate, currentGyroFramerate))
             
-            frameCount = 0
+            accelFrameCount = 0
+            gyroFrameCount = 0
             lastFramerateUpdate = now
         }
     }
