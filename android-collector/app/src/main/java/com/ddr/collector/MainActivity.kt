@@ -34,9 +34,9 @@ class MainActivity : AppCompatActivity() {
             sensorService = localBinder.getService()
             serviceBound = true
             
-            sensorService?.setFramerateCallback { framerate ->
+            sensorService?.setFramerateCallback { accelFramerate, gyroFramerate ->
                 runOnUiThread {
-                    framerateText.text = "Framerate: %.1f Hz".format(framerate)
+                    framerateText.text = "Accel: %.0f Hz, Gyro: %.0f Hz".format(accelFramerate, gyroFramerate)
                 }
             }
             
