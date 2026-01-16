@@ -227,6 +227,7 @@ Examples:
         dest='difficulty_number',
         type=int,
         default=None,
+        choices=range(1, 11),
         help='Difficulty number (1-10)'
     )
     
