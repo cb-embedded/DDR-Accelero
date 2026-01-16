@@ -15,16 +15,18 @@ Two options are available for recording gamepad input:
 The CLI recorder runs in the terminal and captures gamepad events even when the window loses focus. This is ideal for recording button presses while playing DDR games.
 
 ```bash
-python pad_recorder_cli.py
+python pad_recorder_cli.py --music "Lucky Orb" --difficulty-number 5 --difficulty-name Medium
 ```
 
 **Features:**
 - Works in background (no focus required)
 - Continuous polling of gamepad state
 - Exports to same CSV format as web recorder
-- Includes YAML metadata (music name, difficulty)
+- Metadata via command-line arguments
 
 **Requirements:** `pygame` (see requirements.txt)
+
+**See:** [CLI_GAMEPAD_RECORDER.md](CLI_GAMEPAD_RECORDER.md) for detailed usage
 
 ### Web Gamepad Recorder
 

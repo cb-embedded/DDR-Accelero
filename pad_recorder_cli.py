@@ -8,6 +8,7 @@ import pygame
 import time
 import sys
 import os
+import argparse
 from datetime import datetime
 
 class GamepadRecorder:
@@ -157,7 +158,7 @@ event_count: {len(self.log)}
         print(f"\nLog exported to: {output_path}")
         return output_path
     
-    def run(self):
+    def run(self, music_name, difficulty_number, difficulty_name):
         """Main recording loop."""
         if not self.initialize_gamepad():
             return
@@ -169,24 +170,7 @@ event_count: {len(self.log)}
         print("You can switch to other windows (like your DDR game) and")
         print("the events will continue to be recorded.\n")
         
-        # Get metadata
-        music_name = input("Enter music name (or press Enter for 'Unknown'): ").strip()
-        if not music_name:
-            music_name = "Unknown"
-        
-        difficulty_number_str = input("Enter difficulty number (1-10, or press Enter to skip): ").strip()
-        difficulty_number = None
-        if difficulty_number_str:
-            if difficulty_number_str.isdigit():
-                difficulty_number = int(difficulty_number_str)
-            else:
-                print(f"Warning: '{difficulty_number_str}' is not a valid number. Skipping difficulty number.")
-        
-        difficulty_name = input("Enter difficulty name (Easy/Medium/Hard/Expert/Challenge, or press Enter to skip): ").strip()
-        if not difficulty_name:
-            difficulty_name = None
-        
-        print("\nMetadata:")
+        print("Metadata:")
         print(f"  Music: {music_name}")
         print(f"  Difficulty: {difficulty_number if difficulty_number else '-'} {difficulty_name or '-'}")
         
@@ -220,8 +204,44 @@ event_count: {len(self.log)}
         pygame.quit()
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='CLI Gamepad Recorder for DDR dance pad input capture.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --music "Lucky Orb" --difficulty-number 5 --difficulty-name Medium
+  %(prog)s -m "My Song" -n 7 -d Hard
+  %(prog)s --music "Test Song"
+        """
+    )
+    
+    parser.add_argument(
+        '-m', '--music',
+        dest='music_name',
+        default='Unknown',
+        help='Music name (default: Unknown)'
+    )
+    
+    parser.add_argument(
+        '-n', '--difficulty-number',
+        dest='difficulty_number',
+        type=int,
+        default=None,
+        help='Difficulty number (1-10)'
+    )
+    
+    parser.add_argument(
+        '-d', '--difficulty-name',
+        dest='difficulty_name',
+        default=None,
+        choices=['Easy', 'Medium', 'Hard', 'Expert', 'Challenge'],
+        help='Difficulty name'
+    )
+    
+    args = parser.parse_args()
+    
     recorder = GamepadRecorder()
-    recorder.run()
+    recorder.run(args.music_name, args.difficulty_number, args.difficulty_name)
 
 if __name__ == '__main__':
     main()

@@ -16,16 +16,43 @@ pip install pygame
 
 ## Usage
 
+### Basic Usage
+
+```bash
+python pad_recorder_cli.py --music "Lucky Orb" --difficulty-number 5 --difficulty-name Medium
+```
+
+### Command Line Arguments
+
+- `-m`, `--music`: Music name (default: "Unknown")
+- `-n`, `--difficulty-number`: Difficulty number (1-10, optional)
+- `-d`, `--difficulty-name`: Difficulty name (Easy/Medium/Hard/Expert/Challenge, optional)
+- `-h`, `--help`: Show help message
+
+### Examples
+
+```bash
+# Full metadata
+python pad_recorder_cli.py --music "Lucky Orb" --difficulty-number 5 --difficulty-name Medium
+
+# Short form
+python pad_recorder_cli.py -m "My Song" -n 7 -d Hard
+
+# Music name only
+python pad_recorder_cli.py --music "Test Song"
+
+# Use defaults (music will be "Unknown")
+python pad_recorder_cli.py
+```
+
+### Recording Workflow
+
 1. Connect your gamepad/dance pad
-2. Run the recorder:
-   ```bash
-   python pad_recorder_cli.py
-   ```
-3. Enter metadata (music name, difficulty)
-4. Press Enter to start recording
-5. Switch to your DDR game and play
-6. When done, switch back to terminal and press Ctrl+C
-7. Choose to export the log (saved to `raw_data/` directory)
+2. Run the recorder with desired metadata as arguments
+3. Press Enter to start recording
+4. Switch to your DDR game and play
+5. When done, switch back to terminal and press Ctrl+C
+6. Choose to export the log (saved to `raw_data/` directory)
 
 ## Output Format
 
