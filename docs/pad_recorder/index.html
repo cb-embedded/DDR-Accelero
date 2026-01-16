@@ -82,10 +82,35 @@
         .difficulty-group select {
             margin-right: 5px;
         }
+        .warning-box {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 4px;
+            color: #856404;
+        }
+        .warning-box strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        .warning-box a {
+            color: #004085;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <h1>Gamepad Recorder</h1>
+    
+    <div class="warning-box">
+        <strong>⚠️ Browser Limitation</strong>
+        This web recorder only captures gamepad events when the browser window has focus. 
+        If you need to capture events while playing DDR in another window, please use the 
+        <a href="https://github.com/cb-embedded/DDR-Accelero/blob/main/pad_recorder_cli.py">CLI gamepad recorder</a> 
+        (Python script) which works in the background.
+    </div>
     
     <div id="status">No gamepad connected</div>
     

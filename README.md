@@ -6,6 +6,34 @@ Machine Learning-powered Dance Dance Revolution arrow prediction from accelerome
 
 Simple artifact gallery for visualizations (generated during training).
 
+## Gamepad Recording
+
+Two options are available for recording gamepad input:
+
+### CLI Gamepad Recorder (Recommended for background capture)
+
+The CLI recorder runs in the terminal and captures gamepad events even when the window loses focus. This is ideal for recording button presses while playing DDR games.
+
+```bash
+python pad_recorder_cli.py --music "Lucky Orb" --difficulty-number 5 --difficulty-name Medium
+```
+
+**Features:**
+- Works in background (no focus required)
+- Continuous polling of gamepad state
+- Exports to same CSV format as web recorder
+- Metadata via command-line arguments
+
+**Requirements:** `pygame` (see requirements.txt)
+
+**See:** [CLI_GAMEPAD_RECORDER.md](CLI_GAMEPAD_RECORDER.md) for detailed usage
+
+### Web Gamepad Recorder
+
+Browser-based recorder available at: [https://cb-embedded.github.io/DDR-Accelero/pad_recorder/](https://cb-embedded.github.io/DDR-Accelero/pad_recorder/)
+
+**Note:** Due to browser security restrictions, the web recorder only captures events when the browser window has focus. It will stop recording if you switch to another window.
+
 ## API
 
 ### Alignment
@@ -79,9 +107,11 @@ Note: Requires `tf2onnx` package (`pip install tf2onnx`)
 pip install -r requirements.txt
 ```
 
-Dependencies: numpy, pandas, scipy, matplotlib, scikit-learn, tensorflow
+Dependencies: numpy, pandas, scipy, matplotlib, scikit-learn, tensorflow, pygame
 
-**Note:** Keras is included with TensorFlow 2.x
+**Notes:** 
+- Keras is included with TensorFlow 2.x
+- pygame is only required for the CLI gamepad recorder
 
 ## Project Structure
 
