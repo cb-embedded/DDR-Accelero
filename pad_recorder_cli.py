@@ -83,7 +83,6 @@ class GamepadRecorder:
         self.button_states = [False, False, False, False]
         print("\n=== RECORDING STARTED ===")
         print("Press buttons on your gamepad. Events will be captured.")
-        print("Type 's' and press Enter to stop recording.\n")
     
     def stop_recording(self):
         """Stop recording gamepad events."""
@@ -187,16 +186,11 @@ event_count: {len(self.log)}
         input("\nPress Enter to start recording...")
         self.start_recording()
         
+        print("Press Ctrl+C to stop recording and export.\n")
+        
         # Main loop
         try:
             while True:
-                # Check for stop command (non-blocking)
-                import select
-                if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                    line = sys.stdin.readline().strip()
-                    if line.lower() == 's':
-                        break
-                
                 # Poll gamepad
                 if not self.poll_gamepad():
                     print("Gamepad disconnected!")
@@ -206,7 +200,7 @@ event_count: {len(self.log)}
                 time.sleep(0.001)  # 1ms poll rate
         
         except KeyboardInterrupt:
-            print("\n\nRecording interrupted by user.")
+            print("\n\nRecording stopped by user.")
         
         self.stop_recording()
         
