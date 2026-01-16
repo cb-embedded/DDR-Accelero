@@ -125,9 +125,12 @@ class GamepadRecorder:
         filename += '.csv'
         
         # Create YAML frontmatter
+        # Format difficulty_number as string (matching web app behavior) or 'null'
+        diff_num_str = str(difficulty_number) if difficulty_number is not None else 'null'
+        
         yaml_header = f"""---
 music_name: "{music_name}"
-difficulty_number: {difficulty_number if difficulty_number else 'null'}
+difficulty_number: {diff_num_str}
 difficulty_name: {f'"{difficulty_name}"' if difficulty_name else 'null'}
 recorded_at: "{iso_timestamp}"
 absolute_start_time: "{iso_timestamp}"
@@ -171,9 +174,13 @@ event_count: {len(self.log)}
         if not music_name:
             music_name = "Unknown"
         
-        difficulty_number = input("Enter difficulty number (1-10, or press Enter to skip): ").strip()
-        if difficulty_number and not difficulty_number.isdigit():
-            difficulty_number = None
+        difficulty_number_str = input("Enter difficulty number (1-10, or press Enter to skip): ").strip()
+        difficulty_number = None
+        if difficulty_number_str:
+            if difficulty_number_str.isdigit():
+                difficulty_number = int(difficulty_number_str)
+            else:
+                print(f"Warning: '{difficulty_number_str}' is not a valid number. Skipping difficulty number.")
         
         difficulty_name = input("Enter difficulty name (Easy/Medium/Hard/Expert/Challenge, or press Enter to skip): ").strip()
         if not difficulty_name:
@@ -181,7 +188,7 @@ event_count: {len(self.log)}
         
         print("\nMetadata:")
         print(f"  Music: {music_name}")
-        print(f"  Difficulty: {difficulty_number or '-'} {difficulty_name or '-'}")
+        print(f"  Difficulty: {difficulty_number if difficulty_number else '-'} {difficulty_name or '-'}")
         
         input("\nPress Enter to start recording...")
         self.start_recording()
