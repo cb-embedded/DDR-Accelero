@@ -50,7 +50,7 @@ class FileManagerActivity : AppCompatActivity() {
     private fun loadFiles() {
         files.clear()
         filesDir.listFiles { file ->
-            file.name.endsWith(".cbor")
+            file.name.endsWith(".ddrbin")
         }?.sortedByDescending { it.lastModified() }?.let {
             files.addAll(it)
         }
@@ -67,7 +67,7 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private val saveFileLauncher = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/cbor")
+        ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         uri?.let {
             adapter.pendingDownloadFile?.inputStream()?.use { input ->
@@ -84,7 +84,7 @@ class FileManagerActivity : AppCompatActivity() {
         val uri = FileProvider.getUriForFile(this,
             "${applicationContext.packageName}.provider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/cbor"
+            type = "application/octet-stream"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
