@@ -144,7 +144,11 @@ class MainActivity : AppCompatActivity() {
                         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                             data = Uri.parse("package:$packageName")
                         }
-                        startActivity(intent)
+                        try {
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Unable to open battery settings", Toast.LENGTH_SHORT).show()
+                        }
                     }
                     .setNegativeButton("Later", null)
                     .show()
