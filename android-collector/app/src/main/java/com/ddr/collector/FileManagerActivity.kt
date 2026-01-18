@@ -50,7 +50,7 @@ class FileManagerActivity : AppCompatActivity() {
     private fun loadFiles() {
         files.clear()
         filesDir.listFiles { file ->
-            file.extension == "cbor"
+            file.name.endsWith(".cbor")
         }?.sortedByDescending { it.lastModified() }?.let {
             files.addAll(it)
         }

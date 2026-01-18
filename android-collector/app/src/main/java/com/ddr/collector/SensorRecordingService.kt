@@ -158,6 +158,9 @@ class SensorRecordingService : Service(), SensorEventListener {
             writeFileHeader(timestamp)
         } catch (e: Exception) {
             e.printStackTrace()
+            android.util.Log.e("SensorRecordingService", "Failed to create recording file", e)
+            currentFile = null
+            lastFile = null
             return
         }
         
@@ -306,6 +309,7 @@ class SensorRecordingService : Service(), SensorEventListener {
             accelSampleBuffer.clear()
         } catch (e: Exception) {
             e.printStackTrace()
+            android.util.Log.e("SensorRecordingService", "Failed to flush accelerometer buffer", e)
         }
     }
     
@@ -336,6 +340,7 @@ class SensorRecordingService : Service(), SensorEventListener {
             gyroSampleBuffer.clear()
         } catch (e: Exception) {
             e.printStackTrace()
+            android.util.Log.e("SensorRecordingService", "Failed to flush gyroscope buffer", e)
         }
     }
     
