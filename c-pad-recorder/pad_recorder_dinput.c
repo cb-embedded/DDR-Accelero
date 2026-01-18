@@ -1,7 +1,5 @@
 /*
  * DirectInput Gamepad Recorder for Windows
- * Captures gamepad button presses using DirectInput API
- * Compile: gcc pad_recorder_dinput.c -o pad_recorder_dinput -ldinput8 -ldxguid -lole32 -loleaut32
  */
 
 #define DIRECTINPUT_VERSION 0x0800
@@ -15,9 +13,12 @@
 static LPDIRECTINPUT8 g_pDI = NULL;
 static LPDIRECTINPUTDEVICE8 g_pJoystick = NULL;
 static FILE* g_logfile = NULL;
-static clock_t g_start_time;
+static LARGE_INTEGER g_start_time;
+static LARGE_INTEGER g_frequency;
 static BOOL g_button_states[4] = {FALSE, FALSE, FALSE, FALSE};
-static const char* g_btn_names[] = {"LEFT", "RIGHT", "UP", "DOWN"};
+static const char* g_btn_names[] = {"l", "r", "u", "d"};
+static BOOL g_first_event = TRUE;
+static time_t g_session_start;
 
 BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance, VOID* pContext) {
     HRESULT hr;
@@ -76,10 +77,21 @@ BOOL InitDirectInput(HWND hWnd) {
 }
 
 void LogButtonEvent(int btn_idx, BOOL pressed) {
-    double elapsed = (double)(clock() - g_start_time) / CLOCKS_PER_SEC;
+    LARGE_INTEGER now;
+    int elapsed_ms;
+    
+    QueryPerformanceCounter(&now);
+    elapsed_ms = (int)((now.QuadPart - g_start_time.QuadPart) * 1000 / g_frequency.QuadPart);
+    
+    if (g_first_event) {
+        g_first_event = FALSE;
+        fprintf(g_logfile, "---\nstart_time: %lld\n---\n", (long long)g_session_start);
+        fprintf(g_logfile, "timestamp_ms,button,state\n");
+    }
+    
     g_button_states[btn_idx] = pressed;
-    printf("%.3fs %s %s\n", elapsed, g_btn_names[btn_idx], pressed ? "DOWN" : "UP");
-    fprintf(g_logfile, "%.3f,%s,%d\n", elapsed, g_btn_names[btn_idx], pressed ? 1 : 0);
+    printf("%dms %s %d\n", elapsed_ms, g_btn_names[btn_idx], pressed ? 1 : 0);
+    fprintf(g_logfile, "%d,%s,%d\n", elapsed_ms, g_btn_names[btn_idx], pressed ? 1 : 0);
     fflush(g_logfile);
 }
 
@@ -113,16 +125,15 @@ int main() {
     time_t now;
     struct tm* timeinfo;
     
-    time(&now);
+    now = time(NULL);
     timeinfo = localtime(&now);
-    strftime(filename, sizeof(filename), "%Y_%m_%d_%H_%M_%S_pad_record_dinput.csv", timeinfo);
+    strftime(filename, sizeof(filename), "%Y_%m_%d_%H_%M_%S_pad_record.csv", timeinfo);
     
     g_logfile = fopen(filename, "w");
     if (!g_logfile) {
         printf("Failed to create log file.\n");
         return 1;
     }
-    fprintf(g_logfile, "timestamp,button,pressed\n");
     
     hWnd = GetConsoleWindow();
     if (!InitDirectInput(hWnd)) {
@@ -134,11 +145,14 @@ int main() {
     printf("Recording to: %s\n", filename);
     printf("Press Ctrl+C to stop.\n\n");
     
-    g_start_time = clock();
+    QueryPerformanceFrequency(&g_frequency);
+    
+    time(&g_session_start);
+    QueryPerformanceCounter(&g_start_time);
     
     while (1) {
         PollGamepad();
-        Sleep(10);
+        Sleep(1);
     }
     
     SAFE_RELEASE(g_pJoystick);
