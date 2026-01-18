@@ -44,10 +44,6 @@ class SensorRecordingService : Service(), SensorEventListener {
     
     private val binder = LocalBinder()
     private var framerateCallback: ((Float, Float) -> Unit)? = null
-    
-    private companion object {
-        const val BUFFER_SIZE = 100 // Flush to disk every 100 samples
-    }
 
     data class SensorSample(
         val timestamp: Long,
@@ -368,5 +364,6 @@ class SensorRecordingService : Service(), SensorEventListener {
     companion object {
         private const val CHANNEL_ID = "SensorRecordingChannel"
         private const val NOTIFICATION_ID = 1
+        private const val BUFFER_SIZE = 100 // Flush to disk every 100 samples
     }
 }
