@@ -113,5 +113,6 @@ The app requires the following permissions:
 - `FOREGROUND_SERVICE`: Required for background recording
 - `FOREGROUND_SERVICE_SPECIAL_USE`: Special permission for sensor data collection service
 - `POST_NOTIFICATIONS` (Android 13+): Required to show recording notification
+- `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (Android 6+): Allows the app to request exemption from battery optimization to prevent system throttling during background recording, which could reduce data quality and consistency
 
 All permissions are requested at runtime when needed.

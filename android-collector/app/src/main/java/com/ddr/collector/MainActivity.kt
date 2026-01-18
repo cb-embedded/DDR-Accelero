@@ -6,13 +6,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -83,6 +87,8 @@ class MainActivity : AppCompatActivity() {
 
         checkPermissions()
 
+        checkBatteryOptimization()
+
         toggleButton.setOnClickListener {
             val isRecording = sensorService?.isRecording() == true
             if (isRecording) stopRecording() else startRecording()
@@ -119,6 +125,29 @@ class MainActivity : AppCompatActivity() {
                 != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
                     arrayOf(Manifest.permission.HIGH_SAMPLING_RATE_SENSORS), PERMISSION_REQUEST_CODE)
+            }
+        }
+    }
+
+    private fun checkBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = packageName
+            
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                AlertDialog.Builder(this)
+                    .setTitle("Battery Optimization")
+                    .setMessage("To maintain consistent sensor sampling rates during background recording, " +
+                               "this app needs to be exempted from battery optimization. " +
+                               "Without this exemption, the system may throttle the app and reduce data quality.")
+                    .setPositiveButton("Grant") { _, _ ->
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:$packageName")
+                        }
+                        startActivity(intent)
+                    }
+                    .setNegativeButton("Later", null)
+                    .show()
             }
         }
     }
