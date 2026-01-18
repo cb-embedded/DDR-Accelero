@@ -194,17 +194,18 @@ class SensorRecordingService : Service(), SensorEventListener {
         try {
             binaryWriter?.flush()
             binaryWriter?.close()
+            binaryWriter = null
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
-            binaryWriter = null
             try {
                 fileOutputStream?.close()
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                fileOutputStream = null
+                currentFile = null
             }
-            fileOutputStream = null
-            currentFile = null
         }
         
         return lastFile
