@@ -55,7 +55,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val saveFileLauncher = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/cbor")
+        ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         uri?.let {
             lastFile?.inputStream()?.use { input ->
@@ -218,7 +218,7 @@ class MainActivity : AppCompatActivity() {
             val uri = FileProvider.getUriForFile(this, 
                 "${applicationContext.packageName}.provider", file)
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/cbor"
+                type = "application/octet-stream"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
