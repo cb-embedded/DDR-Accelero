@@ -51,3 +51,8 @@ android-collector/.DS_Store
 android-collector/captures/
 android-collector/.externalNativeBuild/
 android-collector/.cxx/
+
+# C build artifacts
+c-pad-recorder/*.exe
+c-pad-recorder/*.o
+c-pad-recorder/*.csv
