@@ -90,7 +90,7 @@ int main() {
     }
     
     printf("XInput Gamepad Recorder\n");
-    printf("Controller found at index: %lu\n", userIndex);
+    printf("Controller found at index: %u\n", userIndex);
     printf("Recording to: %s\n", filename);
     printf("Press Ctrl+C to stop.\n\n");
     

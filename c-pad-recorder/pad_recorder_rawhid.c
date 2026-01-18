@@ -46,7 +46,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             
             GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
             lpb = (LPBYTE)malloc(dwSize);
-            if (lpb == NULL) return 0;
+            if (lpb == NULL) {
+                fclose(g_logfile);
+                return 0;
+            }
             
             if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
                 free(lpb);
@@ -58,6 +61,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (raw->header.dwType == RIM_TYPEHID) {
                 GetRawInputDeviceInfo(raw->header.hDevice, RIDI_PREPARSEDDATA, NULL, &dwSize);
                 preparsedData = (PHIDP_PREPARSED_DATA)malloc(dwSize);
+                if (preparsedData == NULL) {
+                    free(lpb);
+                    return 0;
+                }
                 GetRawInputDeviceInfo(raw->header.hDevice, RIDI_PREPARSEDDATA, preparsedData, &dwSize);
                 
                 HidP_GetCaps(preparsedData, &caps);

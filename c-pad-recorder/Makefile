@@ -18,6 +18,6 @@ pad_recorder_rawhid.exe: pad_recorder_rawhid.c
 all: pad_recorder_dinput.exe pad_recorder_xinput.exe pad_recorder_rawhid.exe
 
 clean:
-	del /Q *.exe *.o *.csv 2>nul || true
+	rm -f *.exe *.o *.csv 2>/dev/null || del /Q *.exe *.o *.csv 2>nul || true
 
 .PHONY: all clean
