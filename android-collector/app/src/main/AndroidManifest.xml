@@ -24,6 +24,10 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".FileManagerActivity"
+            android:exported="false" />
+
         <service
             android:name=".SensorRecordingService"
             android:foregroundServiceType="specialUse"

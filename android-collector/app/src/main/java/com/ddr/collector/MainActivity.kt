@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toggleButton: Button
     private lateinit var downloadButton: Button
     private lateinit var shareButton: Button
+    private lateinit var manageFilesButton: Button
     private var lastFile: File? = null
 
     private val serviceConnection = object : ServiceConnection {
@@ -84,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         toggleButton = findViewById(R.id.toggleButton)
         downloadButton = findViewById(R.id.downloadButton)
         shareButton = findViewById(R.id.shareButton)
+        manageFilesButton = findViewById(R.id.manageFilesButton)
 
         checkPermissions()
 
@@ -96,6 +98,9 @@ class MainActivity : AppCompatActivity() {
 
         downloadButton.setOnClickListener { downloadFile() }
         shareButton.setOnClickListener { shareFile() }
+        manageFilesButton.setOnClickListener { 
+            startActivity(Intent(this, FileManagerActivity::class.java))
+        }
     }
 
     override fun onStart() {
