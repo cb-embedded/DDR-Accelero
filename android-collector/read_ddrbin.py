@@ -95,14 +95,20 @@ def read_ddrbin(filename):
         print(f"Gyroscope samples:      {len(gyro_samples)}")
         
         if accel_samples:
-            duration_accel = (accel_samples[-1][0] - accel_samples[0][0]) / 1e9
-            rate_accel = len(accel_samples) / duration_accel if duration_accel > 0 else 0
-            print(f"Accelerometer rate:     {rate_accel:.1f} Hz")
+            if len(accel_samples) > 1:
+                duration_accel = (accel_samples[-1][0] - accel_samples[0][0]) / 1e9
+                rate_accel = len(accel_samples) / duration_accel if duration_accel > 0 else 0
+                print(f"Accelerometer rate:     {rate_accel:.1f} Hz")
+            else:
+                print(f"Accelerometer rate:     N/A (only 1 sample)")
         
         if gyro_samples:
-            duration_gyro = (gyro_samples[-1][0] - gyro_samples[0][0]) / 1e9
-            rate_gyro = len(gyro_samples) / duration_gyro if duration_gyro > 0 else 0
-            print(f"Gyroscope rate:         {rate_gyro:.1f} Hz")
+            if len(gyro_samples) > 1:
+                duration_gyro = (gyro_samples[-1][0] - gyro_samples[0][0]) / 1e9
+                rate_gyro = len(gyro_samples) / duration_gyro if duration_gyro > 0 else 0
+                print(f"Gyroscope rate:         {rate_gyro:.1f} Hz")
+            else:
+                print(f"Gyroscope rate:         N/A (only 1 sample)")
         
         file_size = filepath.stat().st_size
         print(f"File size:              {file_size} bytes ({file_size / 1024:.1f} KB)")
