@@ -17,6 +17,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import co.nstant.`in`.cbor.CborBuilder
 import co.nstant.`in`.cbor.CborEncoder
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -26,7 +27,12 @@ class SensorRecordingService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
     private var gyroscope: Sensor? = null
-    private val sensorData = mutableListOf<SensorSample>()
+    private val accelSampleBuffer = mutableListOf<SensorSample>()
+    private val gyroSampleBuffer = mutableListOf<SensorSample>()
+    private var currentFile: File? = null
+    private var fileOutputStream: BufferedOutputStream? = null
+    private var accelSampleCount = 0L
+    private var gyroSampleCount = 0L
     private var lastFramerateUpdate = 0L
     private var accelFrameCount = 0
     private var gyroFrameCount = 0
@@ -38,6 +44,10 @@ class SensorRecordingService : Service(), SensorEventListener {
     
     private val binder = LocalBinder()
     private var framerateCallback: ((Float, Float) -> Unit)? = null
+    
+    private companion object {
+        const val BUFFER_SIZE = 100 // Flush to disk every 100 samples
+    }
 
     data class SensorSample(
         val timestamp: Long,
@@ -129,10 +139,27 @@ class SensorRecordingService : Service(), SensorEventListener {
     fun startRecording() {
         if (isRecording) return
         
-        sensorData.clear()
+        accelSampleBuffer.clear()
+        gyroSampleBuffer.clear()
+        accelSampleCount = 0L
+        gyroSampleCount = 0L
         accelFrameCount = 0
         gyroFrameCount = 0
         lastFramerateUpdate = System.currentTimeMillis()
+        
+        // Create file and start writing
+        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+        val filename = "sensor_data_$timestamp.cbor"
+        currentFile = File(filesDir, filename)
+        lastFile = currentFile
+        
+        try {
+            fileOutputStream = BufferedOutputStream(FileOutputStream(currentFile!!))
+            writeFileHeader(timestamp)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return
+        }
         
         wakeLock?.acquire(60 * 60 * 1000L) // 1 hour timeout
         
@@ -156,8 +183,20 @@ class SensorRecordingService : Service(), SensorEventListener {
             wakeLock?.release()
         }
         
-        if (sensorData.isNotEmpty()) {
-            saveDataToCbor()
+        // Flush remaining samples
+        flushAccelBuffer()
+        flushGyroBuffer()
+        
+        // Close file
+        try {
+            writeFileFooter()
+            fileOutputStream?.flush()
+            fileOutputStream?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            fileOutputStream = null
+            currentFile = null
         }
         
         return lastFile
@@ -176,20 +215,30 @@ class SensorRecordingService : Service(), SensorEventListener {
 
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                sensorData.add(SensorSample(
+                accelSampleBuffer.add(SensorSample(
                     timestamp,
                     event.values[0], event.values[1], event.values[2],
                     null, null, null
                 ))
                 accelFrameCount++
+                accelSampleCount++
+                
+                if (accelSampleBuffer.size >= BUFFER_SIZE) {
+                    flushAccelBuffer()
+                }
             }
             Sensor.TYPE_GYROSCOPE -> {
-                sensorData.add(SensorSample(
+                gyroSampleBuffer.add(SensorSample(
                     timestamp,
                     null, null, null,
                     event.values[0], event.values[1], event.values[2]
                 ))
                 gyroFrameCount++
+                gyroSampleCount++
+                
+                if (gyroSampleBuffer.size >= BUFFER_SIZE) {
+                    flushGyroBuffer()
+                }
             }
         }
 
@@ -210,49 +259,102 @@ class SensorRecordingService : Service(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    private fun saveDataToCbor() {
-        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-        val filename = "sensor_data_$timestamp.cbor"
-        val file = File(filesDir, filename)
-        lastFile = file
-
-        val accelSamples = sensorData.filter { it.accelX != null }
-        val gyroSamples = sensorData.filter { it.gyroX != null }
-
-        FileOutputStream(file).use { fos ->
+    private fun writeFileHeader(timestamp: String) {
+        try {
             val builder = CborBuilder()
             val map = builder.addMap()
             
             map.put("device", Build.MODEL)
             map.put("timestamp", timestamp)
-            map.put("accelerometer_count", accelSamples.size.toLong())
-            map.put("gyroscope_count", gyroSamples.size.toLong())
+            map.put("format_version", "streaming_v1")
             
-            val accelArray = map.putArray("accelerometer")
-            accelSamples.forEach { sample ->
-                val sampleMap = accelArray.addMap()
-                sampleMap.put("timestamp", sample.timestamp)
+            map.end()
+            
+            val output = java.io.ByteArrayOutputStream()
+            CborEncoder(output).encode(builder.build())
+            fileOutputStream?.write(output.toByteArray())
+            fileOutputStream?.flush()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    private fun flushAccelBuffer() {
+        if (accelSampleBuffer.isEmpty()) return
+        
+        try {
+            val builder = CborBuilder()
+            val map = builder.addMap()
+            map.put("type", "accelerometer")
+            
+            val array = map.putArray("samples")
+            accelSampleBuffer.forEach { sample ->
+                val sampleMap = array.addMap()
+                sampleMap.put("t", sample.timestamp)
                 sampleMap.put("x", sample.accelX!!.toDouble())
                 sampleMap.put("y", sample.accelY!!.toDouble())
                 sampleMap.put("z", sample.accelZ!!.toDouble())
                 sampleMap.end()
             }
-            accelArray.end()
+            array.end()
+            map.end()
             
-            val gyroArray = map.putArray("gyroscope")
-            gyroSamples.forEach { sample ->
-                val sampleMap = gyroArray.addMap()
-                sampleMap.put("timestamp", sample.timestamp)
+            val output = java.io.ByteArrayOutputStream()
+            CborEncoder(output).encode(builder.build())
+            fileOutputStream?.write(output.toByteArray())
+            
+            accelSampleBuffer.clear()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    private fun flushGyroBuffer() {
+        if (gyroSampleBuffer.isEmpty()) return
+        
+        try {
+            val builder = CborBuilder()
+            val map = builder.addMap()
+            map.put("type", "gyroscope")
+            
+            val array = map.putArray("samples")
+            gyroSampleBuffer.forEach { sample ->
+                val sampleMap = array.addMap()
+                sampleMap.put("t", sample.timestamp)
                 sampleMap.put("x", sample.gyroX!!.toDouble())
                 sampleMap.put("y", sample.gyroY!!.toDouble())
                 sampleMap.put("z", sample.gyroZ!!.toDouble())
                 sampleMap.end()
             }
-            gyroArray.end()
+            array.end()
+            map.end()
+            
+            val output = java.io.ByteArrayOutputStream()
+            CborEncoder(output).encode(builder.build())
+            fileOutputStream?.write(output.toByteArray())
+            
+            gyroSampleBuffer.clear()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    private fun writeFileFooter() {
+        try {
+            val builder = CborBuilder()
+            val map = builder.addMap()
+            
+            map.put("total_accel_samples", accelSampleCount)
+            map.put("total_gyro_samples", gyroSampleCount)
+            map.put("end_marker", true)
             
             map.end()
             
-            CborEncoder(fos).encode(builder.build())
+            val output = java.io.ByteArrayOutputStream()
+            CborEncoder(output).encode(builder.build())
+            fileOutputStream?.write(output.toByteArray())
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
