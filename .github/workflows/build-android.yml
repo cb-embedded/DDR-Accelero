@@ -16,6 +16,8 @@ on:
 jobs:
   build-collector:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
@@ -46,6 +48,8 @@ jobs:
 
   build-tcp-streamer:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
