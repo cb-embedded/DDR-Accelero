@@ -133,7 +133,7 @@ class TcpStreamingService : Service(), SensorEventListener {
                 updateNotification("Connected to $ipAddress:$port")
                 statusCallback?.invoke("Connected")
                 
-                wakeLock?.acquire(60 * 60 * 1000L)
+                wakeLock?.acquire(WAKE_LOCK_TIMEOUT_MS)
                 
                 accelerometer?.let {
                     sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
@@ -233,5 +233,6 @@ class TcpStreamingService : Service(), SensorEventListener {
     companion object {
         private const val CHANNEL_ID = "SensorStreamingChannel"
         private const val NOTIFICATION_ID = 1
+        private const val WAKE_LOCK_TIMEOUT_MS = 60 * 60 * 1000L // 1 hour
     }
 }
