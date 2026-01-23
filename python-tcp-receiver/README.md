@@ -36,6 +36,8 @@ pip install pyqtgraph
 
 ## Usage
 
+### Main Application (with GUI)
+
 1. Start the receiver:
 ```bash
 python receiver.py
@@ -55,6 +57,32 @@ python receiver.py
 
 5. Data will appear in real-time on the graphs
 
+### Test Server (without GUI)
+
+For testing or debugging without the GUI:
+
+```bash
+python test_server.py [port]
+```
+
+This will print received data to the console.
+
+### Test Client (simulates Android app)
+
+To test the receiver without an Android device:
+
+```bash
+# In one terminal:
+python receiver.py
+# or
+python test_server.py
+
+# In another terminal:
+python test_client.py [host] [port]
+```
+
+The test client sends simulated sensor data with sinusoidal patterns.
+
 ## Data Format
 
 The receiver expects data in CSV format:
@@ -67,6 +95,12 @@ Where:
 - `timestamp_ms`: Wall clock timestamp in milliseconds
 - `sensor_type`: Either "accel" or "gyro"
 - `x`, `y`, `z`: Sensor values as floats
+
+Example:
+```
+1769196214007036416,1769196214007,accel,0.100001,11.310000,-0.200000
+1769196214007036416,1769196214007,gyro,0.300000,0.000000,0.200000
+```
 
 ## Plots
 
@@ -107,3 +141,17 @@ You can modify the following parameters in `receiver.py`:
 - Reduce `maxDataPoints` for lower memory usage
 - Increase update interval for less CPU usage
 - Close other applications using the network
+
+## Testing
+
+To verify everything works without Android device:
+
+```bash
+# Terminal 1: Start test server
+python test_server.py
+
+# Terminal 2: Send test data
+python test_client.py localhost 5000
+```
+
+You should see data flowing between the client and server.
