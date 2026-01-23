@@ -5,15 +5,19 @@ on:
     branches: [ main, copilot/create-folder-for-sample-app ]
     paths:
       - 'android-collector/**'
+      - 'android-tcp-streamer/**'
   pull_request:
     branches: [ main ]
     paths:
       - 'android-collector/**'
+      - 'android-tcp-streamer/**'
   workflow_dispatch:
 
 jobs:
-  build:
+  build-collector:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
@@ -40,4 +44,36 @@ jobs:
       with:
         name: ddr-collector-debug
         path: android-collector/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+
+  build-tcp-streamer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Grant execute permission for gradlew
+      run: chmod +x android-tcp-streamer/gradlew
+      
+    - name: Build Debug APK
+      run: |
+        cd android-tcp-streamer
+        ./gradlew assembleDebug --stacktrace
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: ddr-tcp-streamer-debug
+        path: android-tcp-streamer/app/build/outputs/apk/debug/app-debug.apk
         retention-days: 30
